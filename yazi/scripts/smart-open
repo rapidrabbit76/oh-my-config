@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+FILE="${1:?Usage: smart-open <file>}"
+
+has_display() {
+  [ -n "${WAYLAND_DISPLAY:-}" ] && return 0
+  [ -n "${DISPLAY:-}" ] && return 0
+  [ "$(uname)" = "Darwin" ] && [ -z "${SSH_CONNECTION:-}" ] && [ -z "${SSH_TTY:-}" ] && return 0
+  return 1
+}
+
+open_gui() {
+  case "$(uname)" in
+    Darwin) open "$FILE" ;;
+    *)      xdg-open "$FILE" ;;
+  esac
+}
+
+wait_key() {
+  echo ""
+  echo -e "\033[2m(press any key to return)\033[0m"
+  read -rsn1
+}
+
+open_terminal() {
+  local mime
+  mime="$(file --mime-type -b "$FILE" 2>/dev/null)"
+
+  case "$mime" in
+    image/*)
+      if command -v chafa &>/dev/null; then
+        chafa --probe=1.0 -- "$FILE"
+        wait_key
+      else
+        echo "[smart-open] No terminal image viewer. Install: brew install chafa" >&2
+        return 1
+      fi
+      ;;
+    audio/*|video/*)
+      if command -v mpv &>/dev/null; then
+        mpv --no-video "$FILE"
+      elif command -v ffplay &>/dev/null; then
+        ffplay -nodisp -autoexit -loglevel quiet "$FILE"
+      else
+        echo "[smart-open] No terminal media player for: $FILE" >&2
+        return 1
+      fi
+      ;;
+    application/pdf)
+      if command -v timg &>/dev/null; then
+        timg -- "$FILE"
+        wait_key
+      elif command -v pdftotext &>/dev/null; then
+        pdftotext "$FILE" - | less
+      else
+        echo "[smart-open] No terminal PDF viewer. Install: brew install timg" >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "[smart-open] Cannot open in terminal (${mime}): $FILE" >&2
+      return 1
+      ;;
+  esac
+}
+
+if has_display; then
+  open_gui
+else
+  open_terminal
+fi
