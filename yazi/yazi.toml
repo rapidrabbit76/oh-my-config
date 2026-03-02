@@ -1,0 +1,73 @@
+[mgr]
+ratio          = [1, 4, 3]
+linemode       = "size_and_mtime"
+show_hidden    = false
+sort_by        = "natural"
+sort_dir_first = true
+
+[preview]
+image_filter = "lanczos3"
+max_width = 600
+max_height = 900
+
+[opener]
+edit = [
+  { run = 'nvim "$@"', block = true, desc = "nvim" },
+]
+play = [
+  { run = '"$HOME/.local/bin/smart-open" "$@"', block = true, desc = "Smart open", for = "unix" },
+]
+open = [
+  { run = '"$HOME/.local/bin/smart-open" "$@"', block = true, desc = "Smart open", for = "unix" },
+]
+extract = [
+  { run = 'ouch d "$@"', block = true, desc = "Extract here" },
+]
+
+[open]
+rules = [
+  { mime = "text/*", use = "edit" },
+  { mime = "video/*", use = "play" },
+  { mime = "audio/*", use = "play" },
+  { mime = "image/*", use = "open" },
+  { mime = "application/json", use = "edit" },
+  { mime = "*/javascript", use = "edit" },
+  { mime = "application/{*zip,tar,bzip2,7z*,rar,xz,zstd,java-archive}", use = "extract" },
+
+  { mime = "*", use = "open" },
+]
+
+# mime-ext: fast MIME detection by extension (faster than file(1))
+[[plugin.prepend_mimes]]
+name = "*"
+run  = "mime-ext"
+
+# Previewers
+[[plugin.prepend_previewers]]
+mime = "application/{*zip,tar,bzip2,7z*,rar,xz,zstd,java-archive}"
+run  = "ouch"
+
+[[plugin.prepend_previewers]]
+mime = "audio/*"
+run  = "mediainfo"
+
+[[plugin.prepend_previewers]]
+url = "*.csv"
+run = "duckdb"
+
+[[plugin.prepend_previewers]]
+url = "*.tsv"
+run = "duckdb"
+
+[[plugin.prepend_previewers]]
+url = "*.parquet"
+run = "duckdb"
+
+[[plugin.prepend_previewers]]
+url = "*/"
+run = "eza-preview"
+
+# Hexyl as fallback for unknown binary files
+[[plugin.append_previewers]]
+url = "*"
+run = "hexyl"

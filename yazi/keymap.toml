@@ -1,0 +1,223 @@
+# Linemode
+[[mgr.prepend_keymap]]
+on   = ["m","a"]
+run  = "linemode size_and_mtime"
+desc = "Linemode: all (perm+size+date)"
+
+# Smart filter (실시간 필터링)
+[[mgr.prepend_keymap]]
+on   = "F"
+run  = "filter --smart"
+desc = "Filter files"
+
+# Compress (선택 파일 압축) - ouch
+[[mgr.prepend_keymap]]
+on   = ["c","a"]
+run  = "plugin ouch"
+desc = "Compress selected files"
+# Max preview (프리뷰 전체화면 토글)
+[[mgr.prepend_keymap]]
+on   = "T"
+run  = "plugin toggle-pane --args=preview"
+desc = "Toggle max preview"
+
+# Jump to char (문자로 점프)
+[[mgr.prepend_keymap]]
+on   = "f"
+run  = "plugin jump-to-char"
+desc = "Jump to char"
+
+# Chmod (권한 변경)
+[[mgr.prepend_keymap]]
+on   = ["c","m"]
+run  = "plugin chmod"
+desc = "Chmod selected files"
+
+# Diff (파일 비교)
+[[mgr.prepend_keymap]]
+on   = ["c","d"]
+run  = "plugin diff"
+desc = "Diff selected file with hovered"
+
+# Lazygit (git 관리)
+[[mgr.prepend_keymap]]
+on   = ["g","i"]
+run  = "plugin lazygit"
+desc = "Open lazygit"
+
+# Recycle bin (휴지통)
+[[mgr.prepend_keymap]]
+on   = ["R","b"]
+run  = "plugin recycle-bin"
+desc = "Open recycle bin menu"
+
+# Bookmarks (북마크)
+[[mgr.prepend_keymap]]
+on   = ["b","s"]
+run  = "plugin bookmarks -- save"
+desc = "Save bookmark"
+
+[[mgr.prepend_keymap]]
+on   = ["b","j"]
+run  = "plugin bookmarks -- jump"
+desc = "Jump to bookmark"
+
+[[mgr.prepend_keymap]]
+on   = ["b","d"]
+run  = "plugin bookmarks -- delete"
+desc = "Delete bookmark"
+
+[[mgr.prepend_keymap]]
+on   = ["b","D"]
+run  = "plugin bookmarks -- delete_all"
+desc = "Delete all bookmarks"
+
+# Search jump (flash.nvim 스타일 점프)
+[[mgr.prepend_keymap]]
+on   = "i"
+run  = "plugin searchjump"
+desc = "Search jump mode"
+
+# What-size (용량 계산)
+[[mgr.prepend_keymap]]
+on   = ["z", "s"]
+run  = "plugin what-size"
+desc = "Calc size of selection or cwd"
+
+# Mount (디스크 마운트)
+[[mgr.prepend_keymap]]
+on   = ["M","t"]
+run  = "plugin mount"
+desc = "Mount/unmount disks"
+
+# Autosession (세션 저장 후 종료)
+[[mgr.prepend_keymap]]
+on   = "Q"
+run  = "plugin autosession -- save-and-quit"
+desc = "Save session and quit"
+
+# fr (ripgrep 파일 내용 검색)
+[[mgr.prepend_keymap]]
+on   = ["g", "f"]
+run  = "plugin fr"
+desc = "Search file contents (ripgrep)"
+
+# dual-pane (듀얼 패널 토글)
+[[mgr.prepend_keymap]]
+on   = ["\\", "\\"]
+run  = "plugin dual-pane -- toggle"
+desc = "Toggle dual-pane"
+
+[[mgr.prepend_keymap]]
+on   = ["\\", "Tab"]
+run  = "plugin dual-pane -- focus"
+desc = "Focus other dual-pane"
+
+# Projects (프로젝트 저장/로드)
+[[mgr.prepend_keymap]]
+on   = ["P","s"]
+run  = "plugin projects -- save"
+desc = "Save project"
+
+[[mgr.prepend_keymap]]
+on   = ["P","l"]
+run  = "plugin projects -- load"
+desc = "Load project"
+
+[[mgr.prepend_keymap]]
+on   = ["P","P"]
+run  = "plugin projects -- load_last"
+desc = "Load last project"
+
+[[mgr.prepend_keymap]]
+on   = ["P","d"]
+run  = "plugin projects -- delete"
+desc = "Delete project"
+
+# Relative motions (vim 스타일 숫자 점프: 5j, 3k)
+[[mgr.prepend_keymap]]
+on   = "1"
+run  = "plugin relative-motions 1"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "2"
+run  = "plugin relative-motions 2"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "3"
+run  = "plugin relative-motions 3"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "4"
+run  = "plugin relative-motions 4"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "5"
+run  = "plugin relative-motions 5"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "6"
+run  = "plugin relative-motions 6"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "7"
+run  = "plugin relative-motions 7"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "8"
+run  = "plugin relative-motions 8"
+desc = "Move in relative steps"
+
+[[mgr.prepend_keymap]]
+on   = "9"
+run  = "plugin relative-motions 9"
+desc = "Move in relative steps"
+
+# Delete group (삭제 그룹)
+[[mgr.prepend_keymap]]
+on   = ["d","d"]
+run  = '''shell 'trash-put "$@"' --confirm'''
+desc = "Trash selected files (via trash-cli)"
+
+[[mgr.prepend_keymap]]
+on   = ["d","D"]
+run  = "remove --permanently"
+desc = "Permanently delete selected files"
+
+[[mgr.prepend_keymap]]
+on   = ["d","u"]
+run  = "plugin restore"
+desc = "Restore last deleted files"
+
+[[mgr.prepend_keymap]]
+on   = ["d","U"]
+run  = "plugin restore -- --interactive"
+desc = "Restore deleted files (interactive)"
+
+# Eza preview (디렉토리 프리뷰)
+[[mgr.prepend_keymap]]
+on   = ["e","t"]
+run  = "plugin eza-preview"
+desc = "Toggle tree/list dir preview"
+
+[[mgr.prepend_keymap]]
+on   = ["e","-"]
+run  = "plugin eza-preview inc-level"
+desc = "Increment tree level"
+
+[[mgr.prepend_keymap]]
+on   = ["e","_"]
+run  = "plugin eza-preview dec-level"
+desc = "Decrement tree level"
+
+[[mgr.prepend_keymap]]
+on   = ["e","*"]
+run  = "plugin eza-preview toggle-hidden"
+desc = "Toggle hidden files in preview"
