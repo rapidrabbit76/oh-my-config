@@ -162,7 +162,23 @@ if $NERD_FONT_FOUND; then
   ok "Nerd Font detected"
 else
   warn "Nerd Font not detected — icons may not render"
-  echo -e "       ${DIM}Install: brew install --cask font-hack-nerd-font${NC}"
+  if [[ "$OS" == "macos" ]]; then
+    echo -e "       ${DIM}Install: brew install --cask font-hack-nerd-font${NC}"
+  else
+    echo -e "       ${DIM}Install: https://www.nerdfonts.com/font-downloads${NC}"
+  fi
+fi
+
+if [[ "$OS" == "linux" ]]; then
+  LINUX_DEPS_MISSING=()
+  command -v xclip &>/dev/null || LINUX_DEPS_MISSING+=("xclip")
+  command -v curl  &>/dev/null || LINUX_DEPS_MISSING+=("curl")
+  if [[ ${#LINUX_DEPS_MISSING[@]} -gt 0 ]]; then
+    warn "Missing: ${LINUX_DEPS_MISSING[*]}"
+    if [[ "$PKG_MANAGER" == "apt" ]]; then
+      echo -e "       ${DIM}sudo apt install ${LINUX_DEPS_MISSING[*]}${NC}"
+    fi
+  fi
 fi
 
 # ─── [2/5] Backup ───────────────────────────────────────

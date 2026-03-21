@@ -3,25 +3,33 @@
 # API 호출을 최소화하기 위해 캐시 사용
 
 CACHE="/tmp/tmux_public_ip"
-TTL=300  # 5분
+TTL=300
+
+get_file_mtime() {
+  if [[ "$(uname)" == "Darwin" ]]; then
+    stat -f %m "$1" 2>/dev/null || echo 0
+  else
+    stat -c %Y "$1" 2>/dev/null || echo 0
+  fi
+}
 
 if [[ -f "$CACHE" ]]; then
-    cached_ts=$(stat -f %m "$CACHE" 2>/dev/null || echo 0)
-    now=$(date +%s)
-    age=$((now - cached_ts))
+  cached_ts=$(get_file_mtime "$CACHE")
+  now=$(date +%s)
+  age=$((now - cached_ts))
 
-    if (( age < TTL )); then
-        cat "$CACHE"
-        exit 0
-    fi
+  if (( age < TTL )); then
+    cat "$CACHE"
+    exit 0
+  fi
 fi
 
-# 백그라운드에서 갱신 (상태바 블로킹 방지)
 ip=$(curl -s --connect-timeout 2 --max-time 3 ifconfig.me 2>/dev/null)
 
 if [[ -n "$ip" && "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "$ip" > "$CACHE"
-    echo "$ip"
+  echo "$ip" > "$CACHE"
+  chmod 600 "$CACHE"
+  echo "$ip"
 else
-    [[ -f "$CACHE" ]] && cat "$CACHE" || echo "N/A"
+  [[ -f "$CACHE" ]] && cat "$CACHE" || echo "N/A"
 fi
