@@ -4,6 +4,36 @@ Personal dotfiles repo, born out of pure rage after Claude Code butchered my con
 
 Portable, cross-platform terminal configs that survive across macOS, Linux, and SSH sessions. One-liner install, version-controlled, never losing my setup again.
 
+## Full Setup (all at once)
+
+Install everything — zsh + tmux + yazi:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh) && \
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/tmux/install.sh) && \
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/yazi/install.sh)
+```
+
+Or install each component individually:
+
+---
+
+## Zsh
+
+Modern zsh environment — oh-my-zsh, starship prompt, 18 modern CLI replacements (eza, bat, ripgrep, zoxide, btop, etc.)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh)
+```
+
+or with wget:
+
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh)
+```
+
+> [**Full documentation →**](zsh/README.md)
+
 ## Tmux
 
 Catppuccin Mocha themed tmux with enhanced status bar — network speed, disk, public IP, pomodoro timer.
@@ -40,6 +70,10 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 
 ```
 oh-my-config/
+├── zsh/                          Zsh shell environment
+│   ├── .zshrc
+│   ├── install.sh
+│   └── README.md                 ← detailed docs
 ├── tmux/                         Tmux terminal multiplexer config
 │   ├── .tmux.conf
 │   ├── install.sh
