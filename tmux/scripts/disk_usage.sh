@@ -1,5 +1,11 @@
 #!/bin/bash
-# tmux 상태바용 디스크 사용량 (루트 파티션)
+# tmux status bar disk usage.
+# On macOS, user data lives on /System/Volumes/Data rather than /.
 
-usage=$(df -h / | awk 'NR==2 {print $5}')
+target="/"
+if [[ "$(uname)" == "Darwin" ]]; then
+  target="/System/Volumes/Data"
+fi
+
+usage=$(df -h "$target" | awk 'NR==2 {print $5}')
 echo "${usage}"
