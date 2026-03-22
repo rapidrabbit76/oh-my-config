@@ -36,7 +36,7 @@ require("autosession"):setup()
 
 -- Yatline (status bar)
 require("yatline"):setup({
-	display_header_line = false,
+	display_header_line = true,
 	status_line = {
 		left = {
 			section_a = { {type = "string", custom = false, name = "tab_mode"} },
@@ -61,11 +61,7 @@ require("projects"):setup({
 	},
 })
 
--- Relative motions
-require("relative-motions"):setup({
-	show_numbers = "relative",
-	show_motion = true,
-})
+
 
 -- Restore
 require("restore"):setup()
