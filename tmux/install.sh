@@ -3,9 +3,13 @@ set -euo pipefail
 
 REPO_URL="https://github.com/rapidrabbit76/oh-my-config.git"
 TMUX_CONF="$HOME/.tmux.conf"
+TMUX_LOCAL_CONF="$HOME/.tmux.conf.local"
+MANAGED_DIR="$HOME/.config/oh-my-config/tmux"
+MANAGED_CONF="$MANAGED_DIR/.tmux.conf"
 TMUX_SCRIPTS="$HOME/.tmux/scripts"
 TPM_DIR="$HOME/.tmux/plugins/tpm"
 BACKUP_FILE="$TMUX_CONF.bak.$(date +%Y%m%d%H%M%S)"
+LOCAL_BACKUP_FILE="$TMUX_LOCAL_CONF.bak.$(date +%Y%m%d%H%M%S)"
 REMOTE_MODE=false
 CLEANUP_DIR=""
 
@@ -36,6 +40,14 @@ info()  { echo -e "${CYAN}[INFO]${NC} $1"; }
 ok()    { echo -e "${GREEN}  ✓${NC} $1"; }
 warn()  { echo -e "${YELLOW}  ⚠${NC} $1"; }
 error() { echo -e "${RED}  ✗${NC} $1"; }
+
+bootstrap_tmux_conf() {
+  cat > "$TMUX_CONF" <<'EOF'
+# Managed by oh-my-config/tmux installer.
+source-file ~/.config/oh-my-config/tmux/.tmux.conf
+if-shell '[ -f ~/.tmux.conf.local ]' 'source-file ~/.tmux.conf.local'
+EOF
+}
 
 PROGRESS_CURRENT=0
 PROGRESS_TOTAL=0
@@ -88,6 +100,8 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   echo ""
 
   [[ -f "$TMUX_CONF" ]] && rm -f "$TMUX_CONF" && ok "Removed ~/.tmux.conf"
+  [[ -f "$TMUX_LOCAL_CONF" ]] && rm -f "$TMUX_LOCAL_CONF" && ok "Removed ~/.tmux.conf.local"
+  [[ -d "$MANAGED_DIR" ]] && rm -rf "$MANAGED_DIR" && ok "Removed managed tmux config"
   [[ -d "$TMUX_SCRIPTS" ]] && rm -rf "$TMUX_SCRIPTS" && ok "Removed ~/.tmux/scripts/"
   [[ -d "$TPM_DIR" ]] && rm -rf "$TPM_DIR" && ok "Removed TPM"
 
@@ -193,18 +207,42 @@ else
   ok "No existing config to back up"
 fi
 
+if [[ -f "$TMUX_LOCAL_CONF" ]] || [[ -L "$TMUX_LOCAL_CONF" ]]; then
+  cp -P "$TMUX_LOCAL_CONF" "$LOCAL_BACKUP_FILE"
+  ok "Backed up local overrides to ${DIM}$LOCAL_BACKUP_FILE${NC}"
+fi
+
 # ─── [3/5] Config files ────────────────────────────────
 echo ""
 echo -e "${BOLD}  [3/5] Config files${NC}"
 echo ""
 
-mkdir -p "$TMUX_SCRIPTS"
+mkdir -p "$TMUX_SCRIPTS" "$MANAGED_DIR"
 
-ITEMS=(".tmux.conf" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh")
+ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh")
 progress_start ${#ITEMS[@]}
 
-cp "$SCRIPT_DIR/.tmux.conf" "$TMUX_CONF"
-progress_tick ".tmux.conf"
+cp "$SCRIPT_DIR/.tmux.conf" "$MANAGED_CONF"
+progress_tick "managed .tmux.conf"
+
+if [[ -f "$TMUX_CONF" ]] && ! grep -Fq "source-file ~/.config/oh-my-config/tmux/.tmux.conf" "$TMUX_CONF"; then
+  if [[ ! -e "$TMUX_LOCAL_CONF" ]]; then
+    cp -P "$TMUX_CONF" "$TMUX_LOCAL_CONF"
+    ok "Migrated existing ~/.tmux.conf to ~/.tmux.conf.local"
+  else
+    warn "~/.tmux.conf.local already exists; kept existing local overrides"
+  fi
+fi
+
+bootstrap_tmux_conf
+progress_tick "bootstrap .tmux.conf"
+
+if [[ ! -e "$TMUX_LOCAL_CONF" ]]; then
+  cp "$SCRIPT_DIR/.tmux.conf.local.example" "$TMUX_LOCAL_CONF"
+  progress_tick ".tmux.conf.local"
+else
+  progress_tick ".tmux.conf.local"
+fi
 
 for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh; do
   cp "$SCRIPT_DIR/scripts/$script" "$TMUX_SCRIPTS/$script"

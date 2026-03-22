@@ -1,0 +1,14 @@
+# Local overrides for oh-my-config tmux.
+# This file is never overwritten by the installer after it is created.
+
+# Prefix + hjkl pane movement
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+# Option + hjkl pane movement without prefix
+bind -n M-h select-pane -L
+bind -n M-j select-pane -D
+bind -n M-k select-pane -U
+bind -n M-l select-pane -R
