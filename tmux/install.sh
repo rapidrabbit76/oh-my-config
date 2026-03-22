@@ -224,6 +224,14 @@ else
   ok "TPM installed to ${DIM}$TPM_DIR${NC}"
 fi
 
+CATPPUCCIN_DIR="$HOME/.tmux/plugins/tmux"
+if [[ -d "$CATPPUCCIN_DIR" ]]; then
+  ok "Catppuccin theme already installed"
+else
+  git clone -b v2.1.3 --depth 1 https://github.com/catppuccin/tmux.git "$CATPPUCCIN_DIR" 2>/dev/null
+  ok "Catppuccin theme installed ${DIM}(v2.1.3)${NC}"
+fi
+
 # ─── [5/5] Reload ───────────────────────────────────────
 echo ""
 echo -e "${BOLD}  [5/5] Reload${NC}"
