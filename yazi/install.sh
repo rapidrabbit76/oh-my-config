@@ -265,9 +265,10 @@ echo -e "${BOLD}  [4/6] Config files${NC}"
 echo ""
 
 mkdir -p "$YAZI_CONFIG_DIR/plugins/mediainfo.yazi"
+mkdir -p "$YAZI_CONFIG_DIR/plugins/compress-each.yazi"
 
 CONFIG_FILES=(yazi.toml keymap.toml theme.toml init.lua)
-progress_start $((${#CONFIG_FILES[@]} + 2))
+progress_start $((${#CONFIG_FILES[@]} + 3))
 
 for f in "${CONFIG_FILES[@]}"; do
   cp "$SCRIPT_DIR/$f" "$YAZI_CONFIG_DIR/$f"
@@ -276,6 +277,9 @@ done
 
 cp "$SCRIPT_DIR/plugins/mediainfo.yazi/main.lua" "$YAZI_CONFIG_DIR/plugins/mediainfo.yazi/main.lua"
 progress_tick "mediainfo.yazi"
+
+cp "$SCRIPT_DIR/plugins/compress-each.yazi/main.lua" "$YAZI_CONFIG_DIR/plugins/compress-each.yazi/main.lua"
+progress_tick "compress-each.yazi"
 
 SMART_OPEN_DIR="$HOME/.local/bin"
 mkdir -p "$SMART_OPEN_DIR"

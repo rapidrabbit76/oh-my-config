@@ -15,6 +15,12 @@ desc = "Filter files"
 on   = ["c","a"]
 run  = "plugin ouch"
 desc = "Compress selected files"
+
+# Compress each (선택 파일 각각 압축) - ouch
+[[mgr.prepend_keymap]]
+on   = ["c","e"]
+run  = "plugin compress-each"
+desc = "Compress each selected file individually"
 # Max preview (프리뷰 전체화면 토글)
 [[mgr.prepend_keymap]]
 on   = "T"
