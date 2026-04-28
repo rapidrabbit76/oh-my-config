@@ -9,6 +9,8 @@ NVIM_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/nvim"
 BACKUP_DIR="$NVIM_DIR.bak.$(date +%Y%m%d%H%M%S)"
 REMOTE_MODE=false
 CLEANUP_DIR=""
+ORIGINAL_PATH="$PATH"
+NVIM_BIN=""
 
 if [[ "${BASH_SOURCE[0]}" == "bash" ]] || [[ "${BASH_SOURCE[0]}" == "/dev/stdin" ]] || [[ ! -f "${BASH_SOURCE[0]}" ]]; then
   REMOTE_MODE=true
@@ -66,6 +68,96 @@ NVIM_MIN_VERSION="0.11.2"
 
 version_ge() {
   [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]
+}
+
+nvim_version_raw() {
+  "$1" --version 2>/dev/null | head -1
+}
+
+parse_nvim_version() {
+  echo "$1" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/'
+}
+
+nvim_is_supported() {
+  local bin="$1" raw ver
+  [[ -x "$bin" ]] || return 1
+  raw="$(nvim_version_raw "$bin")"
+  ver="$(parse_nvim_version "$raw")"
+  [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_ge "$ver" "$NVIM_MIN_VERSION"
+}
+
+prefer_nvim_bin() {
+  local bin="$1" dir
+  [[ -x "$bin" ]] || return 1
+  dir="$(cd "$(dirname "$bin")" && pwd)"
+  export PATH="$dir:$PATH"
+  hash -r 2>/dev/null || true
+  NVIM_BIN="$bin"
+}
+
+detect_supported_nvim() {
+  local candidates=()
+  local brew_prefix=""
+
+  [[ -n "$NVIM_BIN" ]] && candidates+=("$NVIM_BIN")
+  if command -v brew &>/dev/null; then
+    brew_prefix="$(brew --prefix 2>/dev/null || true)"
+    [[ -n "$brew_prefix" ]] && candidates+=("$brew_prefix/bin/nvim")
+  fi
+  candidates+=("$HOME/.local/bin/nvim")
+  if command -v nvim &>/dev/null; then
+    candidates+=("$(command -v nvim)")
+  fi
+
+  for bin in "${candidates[@]}"; do
+    if nvim_is_supported "$bin"; then
+      prefer_nvim_bin "$bin"
+      return 0
+    fi
+  done
+  return 1
+}
+
+shell_rc_file() {
+  case "$(basename "${SHELL:-}")" in
+    zsh)  echo "$HOME/.zshrc" ;;
+    bash) echo "$HOME/.bashrc" ;;
+    *)    echo "$HOME/.profile" ;;
+  esac
+}
+
+persist_shell_line() {
+  local label="$1" line="$2" rc_file answer
+  rc_file="$(shell_rc_file)"
+
+  if [[ -f "$rc_file" ]] && grep -Fqx -- "$line" "$rc_file" 2>/dev/null; then
+    ok "$label already persisted in $rc_file"
+    return 0
+  fi
+
+  read -rp "  Add $label to $rc_file permanently? [Y/n] " answer
+  if [[ "${answer:-Y}" =~ ^[Yy]?$ ]]; then
+    mkdir -p "$(dirname "$rc_file")"
+    {
+      echo ""
+      echo "# oh-my-config nvim"
+      echo "$line"
+    } >> "$rc_file"
+    ok "Added $label to $rc_file"
+    warn "Restart your shell or run: source $rc_file"
+  else
+    warn "This installer will use the new nvim now, but future shells may still resolve the old one"
+  fi
+}
+
+prefer_brew_nvim() {
+  local brew_prefix
+  brew_prefix="$(brew --prefix 2>/dev/null || true)"
+  [[ -n "$brew_prefix" ]] || return 0
+  prefer_nvim_bin "$brew_prefix/bin/nvim" || true
+  if [[ "$OS" == "linux" ]]; then
+    persist_shell_line "Linuxbrew shellenv" 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+  fi
 }
 
 ensure_brew() {
@@ -139,12 +231,8 @@ install_nvim_tarball() {
   ok "nvim installed to $install_target"
   ok "Symlinked to $bin_dir/nvim"
 
-  if ! echo "$PATH" | tr ':' '\n' | grep -qx "$bin_dir"; then
-    export PATH="$bin_dir:$PATH"
-    warn "$bin_dir not in PATH — exported for current session"
-    warn "Add to ~/.zshrc or ~/.bashrc:"
-    echo -e "       ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
-  fi
+  prefer_nvim_bin "$bin_dir/nvim"
+  persist_shell_line "$bin_dir PATH" 'export PATH="$HOME/.local/bin:$PATH"'
   return 0
 }
 
@@ -162,6 +250,7 @@ install_or_upgrade_nvim() {
       info "${action}ing neovim via brew"
       brew install neovim &>/dev/null && ok "neovim installed" || { error "brew install neovim failed"; return 1; }
     fi
+    prefer_brew_nvim
     return 0
   fi
 
@@ -186,6 +275,7 @@ install_or_upgrade_nvim() {
         info "${action}ing neovim via brew"
         brew install neovim &>/dev/null && ok "neovim installed via brew" || { error "brew install failed"; return 1; }
       fi
+      prefer_brew_nvim
       ;;
     2)
       install_nvim_tarball || return 1
@@ -297,9 +387,14 @@ echo ""
 
 NVIM_OK=false
 NVIM_NEEDS_UPGRADE=false
-if command -v nvim &>/dev/null; then
-  NVIM_VER_RAW="$(nvim --version 2>/dev/null | head -1)"
-  NVIM_VER="$(echo "$NVIM_VER_RAW" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+if detect_supported_nvim; then
+  NVIM_VER_RAW="$(nvim_version_raw "$NVIM_BIN")"
+  ok "Found $NVIM_VER_RAW ${DIM}(LazyVim requires >= $NVIM_MIN_VERSION)${NC}"
+  NVIM_OK=true
+elif command -v nvim &>/dev/null; then
+  NVIM_BIN="$(command -v nvim)"
+  NVIM_VER_RAW="$(nvim_version_raw "$NVIM_BIN")"
+  NVIM_VER="$(parse_nvim_version "$NVIM_VER_RAW")"
   if [[ "$NVIM_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_ge "$NVIM_VER" "$NVIM_MIN_VERSION"; then
     ok "Found $NVIM_VER_RAW ${DIM}(LazyVim requires >= $NVIM_MIN_VERSION)${NC}"
     NVIM_OK=true
@@ -325,12 +420,11 @@ if ! $NVIM_OK; then
       install_or_upgrade_nvim "Install" || true
     fi
 
-    hash -r 2>/dev/null || true
-    if command -v nvim &>/dev/null; then
-      NVIM_VER_RAW="$(nvim --version 2>/dev/null | head -1)"
-      NVIM_VER="$(echo "$NVIM_VER_RAW" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+    if detect_supported_nvim; then
+      NVIM_VER_RAW="$(nvim_version_raw "$NVIM_BIN")"
+      NVIM_VER="$(parse_nvim_version "$NVIM_VER_RAW")"
       if [[ "$NVIM_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_ge "$NVIM_VER" "$NVIM_MIN_VERSION"; then
-        ok "Now running $NVIM_VER ${DIM}(>= $NVIM_MIN_VERSION)${NC}"
+        ok "Now using $NVIM_VER at ${DIM}$NVIM_BIN${NC} ${DIM}(>= $NVIM_MIN_VERSION)${NC}"
         NVIM_OK=true
       else
         error "Installed Neovim still too old: $NVIM_VER (need >= $NVIM_MIN_VERSION)"
@@ -338,7 +432,7 @@ if ! $NVIM_OK; then
         exit 1
       fi
     else
-      error "Neovim install failed"
+      error "Neovim install failed or PATH still resolves only an old version"
       exit 1
     fi
   else
@@ -538,10 +632,10 @@ echo ""
 
 read -rp "  Install LazyVim plugins now (headless, ~1-2 min)? [Y/n] " answer
 if [[ "${answer:-Y}" =~ ^[Yy]?$ ]]; then
-  info "Running: nvim --headless \"+Lazy! sync\" +qa"
+  info "Running: $NVIM_BIN --headless \"+Lazy! sync\" +qa"
   echo -e "  ${DIM}(plugin downloads stream below — be patient)${NC}"
   echo ""
-  if nvim --headless "+Lazy! sync" +qa 2>&1 | tail -20; then
+  if "$NVIM_BIN" --headless "+Lazy! sync" +qa 2>&1 | tail -20; then
     echo ""
     ok "Plugins installed"
   else
@@ -569,6 +663,13 @@ echo -e "${GREEN}  ║${NC}  ${DIM}Uninstall:    install.sh --uninstall${NC}    
 echo -e "${GREEN}  ║                                               ║${NC}"
 echo -e "${GREEN}  ╚═══════════════════════════════════════════════╝${NC}"
 echo ""
+if [[ -n "$NVIM_BIN" ]]; then
+  ORIGINAL_NVIM_BIN="$(PATH="$ORIGINAL_PATH" command -v nvim 2>/dev/null || true)"
+  echo -e "  ${DIM}Neovim binary used by installer:${NC} ${CYAN}$NVIM_BIN${NC}"
+  if [[ -n "$ORIGINAL_NVIM_BIN" ]] && [[ "$ORIGINAL_NVIM_BIN" != "$NVIM_BIN" ]]; then
+    warn "Your already-open parent shell may still run $ORIGINAL_NVIM_BIN until you restart or source your shell rc"
+  fi
+fi
 echo -e "  ${DIM}Also install zsh, tmux & yazi configs:${NC}"
 echo -e "  ${CYAN}bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh)${NC}"
 echo -e "  ${CYAN}bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/tmux/install.sh)${NC}"

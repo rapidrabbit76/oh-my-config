@@ -130,6 +130,25 @@ A **Nerd Font** is also recommended for file/git icons. The installer warns if n
 
 > ⚠️  On older Ubuntu LTS, apt's neovim is below LazyVim's minimum (0.11.2). The installer detects this and offers a 3-way picker: **Linuxbrew** (recommended, always latest), **official prebuilt tarball** to `~/.local/share/nvim-prebuilt` (no sudo), or native package manager (with explicit "may be outdated" warning).
 
+### Linux PATH note
+
+If Linux already has `/usr/bin/nvim` from apt/dnf, the newer install must appear earlier in `PATH` or the old version will keep winning.
+
+The installer now:
+
+- runs plugin bootstrap with the exact upgraded binary it installed/found
+- prepends Linuxbrew's `bin` or `~/.local/bin` for the current installer session
+- offers to persist the needed line in your shell rc (`~/.bashrc`, `~/.zshrc`, or `~/.profile`)
+
+After installing, restart your shell or run `source ~/.bashrc` / `source ~/.zshrc`, then verify:
+
+```bash
+command -v nvim
+nvim --version | head -1
+```
+
+You should see Neovim `>= 0.11.2`.
+
 ---
 
 ## Switching themes later
