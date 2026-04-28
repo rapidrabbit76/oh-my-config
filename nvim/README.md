@@ -40,7 +40,7 @@ cd oh-my-config/nvim
 ## What the installer does
 
 1. Detect platform (macOS / Linux) and package manager (brew / apt / dnf / pacman)
-2. Audit Neovim (>= 0.9 required by LazyVim) and install if missing
+2. Audit Neovim (>= 0.11.2 required by LazyVim) and **auto-upgrade if outdated** — picks latest via brew (macOS / Linuxbrew) or official prebuilt tarball (Linux fallback)
 3. Audit optional CLI deps — `ripgrep`, `fd`, `lazygit`
 4. Detect Nerd Font (warn only)
 5. Backup existing `~/.config/nvim/` to `~/.config/nvim.bak.<timestamp>/`
@@ -128,7 +128,7 @@ A **Nerd Font** is also recommended for file/git icons. The installer warns if n
 | Fedora          | dnf (or brew)    | `sudo dnf install neovim`     |
 | Arch            | pacman (or brew) | `sudo pacman -S neovim`       |
 
-> ⚠️  On older Ubuntu LTS, apt's neovim is below LazyVim's minimum (0.9). If the installer warns about version, install from [Neovim releases](https://github.com/neovim/neovim/releases) or use Homebrew on Linux.
+> ⚠️  On older Ubuntu LTS, apt's neovim is below LazyVim's minimum (0.11.2). The installer detects this and offers a 3-way picker: **Linuxbrew** (recommended, always latest), **official prebuilt tarball** to `~/.local/share/nvim-prebuilt` (no sudo), or native package manager (with explicit "may be outdated" warning).
 
 ---
 
@@ -143,7 +143,7 @@ Two ways:
 
 ## Requirements
 
-- **Neovim** >= 0.9.0 (LazyVim minimum, 0.10+ recommended)
+- **Neovim** >= 0.11.2 (LazyVim minimum — installer auto-upgrades if outdated)
 - **git**, **curl**
 - Terminal with **true color** + **256 color** ANSI support (for the theme picker swatches)
 - **Nerd Font** for icons (recommended, not required)

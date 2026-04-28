@@ -62,6 +62,163 @@ progress_tick() {
   fi
 }
 
+NVIM_MIN_VERSION="0.11.2"
+
+version_ge() {
+  [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]
+}
+
+ensure_brew() {
+  if $HAS_BREW; then return 0; fi
+  warn "Homebrew not found — needed for reliable latest neovim"
+  read -rp "  Install Homebrew now? [Y/n] " answer
+  if [[ ! "${answer:-Y}" =~ ^[Yy]?$ ]]; then return 1; fi
+  if [[ "$OS" == "linux" ]]; then
+    if [[ "$PKG_MANAGER" == "apt" ]]; then
+      sudo apt update -qq && sudo apt install -y build-essential procps curl file git &>/dev/null || true
+    elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+      sudo dnf groupinstall -y 'Development Tools' &>/dev/null || true
+      sudo dnf install -y procps-ng curl file git &>/dev/null || true
+    fi
+  fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  if [[ "$OS" == "linux" ]]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" 2>/dev/null || true
+  elif [[ "$OS" == "macos" ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)" 2>/dev/null || \
+    eval "$(/usr/local/bin/brew shellenv)" 2>/dev/null || true
+  fi
+  if command -v brew &>/dev/null; then
+    HAS_BREW=true
+    PKG_MANAGER="brew"
+    ok "Homebrew installed"
+    return 0
+  fi
+  return 1
+}
+
+install_nvim_tarball() {
+  local install_dir="$HOME/.local"
+  local bin_dir="$install_dir/bin"
+  mkdir -p "$bin_dir" "$install_dir/share"
+
+  local arch_suffix="x86_64"
+  [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]] && arch_suffix="arm64"
+
+  local url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-${arch_suffix}.tar.gz"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+
+  info "Downloading nvim tarball..."
+  echo -e "       ${DIM}$url${NC}"
+  if ! curl -fsSL "$url" -o "$tmp_dir/nvim.tar.gz"; then
+    error "Download failed"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  if ! tar xzf "$tmp_dir/nvim.tar.gz" -C "$tmp_dir" 2>/dev/null; then
+    error "Extraction failed"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  local extracted
+  extracted="$(find "$tmp_dir" -maxdepth 1 -type d -name 'nvim-linux*' | head -1)"
+  if [[ -z "$extracted" ]]; then
+    error "Could not locate extracted nvim directory"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  local install_target="$install_dir/share/nvim-prebuilt"
+  rm -rf "$install_target"
+  mv "$extracted" "$install_target"
+  ln -sf "$install_target/bin/nvim" "$bin_dir/nvim"
+  rm -rf "$tmp_dir"
+
+  ok "nvim installed to $install_target"
+  ok "Symlinked to $bin_dir/nvim"
+
+  if ! echo "$PATH" | tr ':' '\n' | grep -qx "$bin_dir"; then
+    export PATH="$bin_dir:$PATH"
+    warn "$bin_dir not in PATH — exported for current session"
+    warn "Add to ~/.zshrc or ~/.bashrc:"
+    echo -e "       ${DIM}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
+  fi
+  return 0
+}
+
+install_or_upgrade_nvim() {
+  local action="${1:-Install}"
+
+  if [[ "$OS" == "macos" ]]; then
+    if ! $HAS_BREW; then
+      ensure_brew || { error "Homebrew is required for macOS install"; return 1; }
+    fi
+    if brew list --versions neovim &>/dev/null; then
+      info "${action}ing neovim via brew (already installed → upgrade)"
+      brew upgrade neovim 2>/dev/null && ok "neovim upgraded" || warn "brew upgrade returned non-zero (already latest?)"
+    else
+      info "${action}ing neovim via brew"
+      brew install neovim &>/dev/null && ok "neovim installed" || { error "brew install neovim failed"; return 1; }
+    fi
+    return 0
+  fi
+
+  echo ""
+  echo -e "  ${BOLD}Choose method:${NC}"
+  echo -e "    ${CYAN}1)${NC} Homebrew (Linuxbrew) ${DIM}— always latest, recommended${NC}"
+  echo -e "    ${CYAN}2)${NC} Official prebuilt tarball ${DIM}— ~/.local/share/nvim-prebuilt, no sudo${NC}"
+  if [[ -n "$PKG_MANAGER" ]] && [[ "$PKG_MANAGER" != "brew" ]]; then
+    echo -e "    ${CYAN}3)${NC} Native ${PKG_MANAGER} ${DIM}(may be older than $NVIM_MIN_VERSION)${NC}"
+  fi
+  echo ""
+  read -rp "  Choice [default: 1]: " method
+  method="${method:-1}"
+
+  case "$method" in
+    1)
+      ensure_brew || { error "Homebrew install declined/failed"; return 1; }
+      if brew list --versions neovim &>/dev/null; then
+        info "${action}ing neovim via brew (already installed → upgrade)"
+        brew upgrade neovim 2>/dev/null && ok "neovim upgraded" || warn "brew upgrade returned non-zero (already latest?)"
+      else
+        info "${action}ing neovim via brew"
+        brew install neovim &>/dev/null && ok "neovim installed via brew" || { error "brew install failed"; return 1; }
+      fi
+      ;;
+    2)
+      install_nvim_tarball || return 1
+      ;;
+    3)
+      case "$PKG_MANAGER" in
+        apt)
+          if sudo apt update -qq && sudo apt install -y neovim &>/dev/null; then
+            ok "neovim installed via apt"
+            warn "apt's neovim is often outdated — if still < $NVIM_MIN_VERSION, re-run and pick option 1 or 2"
+          else
+            error "apt install failed"; return 1
+          fi
+          ;;
+        dnf)
+          sudo dnf install -y neovim &>/dev/null && ok "neovim installed via dnf" || { error "dnf install failed"; return 1; }
+          ;;
+        pacman)
+          sudo pacman -S --noconfirm neovim &>/dev/null && ok "neovim installed via pacman" || { error "pacman install failed"; return 1; }
+          ;;
+        *)
+          error "No supported native package manager"; return 1
+          ;;
+      esac
+      ;;
+    *)
+      error "Invalid choice"
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 show_banner() {
   echo ""
   echo -e "${BOLD}${CYAN}"
@@ -139,16 +296,16 @@ echo -e "${BOLD}  [2/6] Neovim + dependencies${NC}"
 echo ""
 
 NVIM_OK=false
+NVIM_NEEDS_UPGRADE=false
 if command -v nvim &>/dev/null; then
   NVIM_VER_RAW="$(nvim --version 2>/dev/null | head -1)"
-  NVIM_VER="$(echo "$NVIM_VER_RAW" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+).*/\1/')"
-  NVIM_MAJOR="${NVIM_VER%%.*}"
-  NVIM_MINOR="${NVIM_VER##*.}"
-  if [[ "$NVIM_MAJOR" -gt 0 ]] || [[ "$NVIM_MINOR" -ge 9 ]]; then
-    ok "Found $NVIM_VER_RAW ${DIM}(LazyVim requires >= 0.9)${NC}"
+  NVIM_VER="$(echo "$NVIM_VER_RAW" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+  if [[ "$NVIM_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_ge "$NVIM_VER" "$NVIM_MIN_VERSION"; then
+    ok "Found $NVIM_VER_RAW ${DIM}(LazyVim requires >= $NVIM_MIN_VERSION)${NC}"
     NVIM_OK=true
   else
-    warn "Found $NVIM_VER_RAW — LazyVim requires >= 0.9.0"
+    warn "Found $NVIM_VER_RAW — LazyVim requires >= $NVIM_MIN_VERSION"
+    NVIM_NEEDS_UPGRADE=true
   fi
 else
   warn "Neovim not found"
@@ -156,33 +313,36 @@ fi
 
 if ! $NVIM_OK; then
   echo ""
-  read -rp "  Install Neovim now? [Y/n] " answer
+  if $NVIM_NEEDS_UPGRADE; then
+    read -rp "  Upgrade Neovim to latest? [Y/n] " answer
+  else
+    read -rp "  Install latest Neovim? [Y/n] " answer
+  fi
   if [[ "${answer:-Y}" =~ ^[Yy]?$ ]]; then
-    if $HAS_BREW; then
-      brew install neovim &>/dev/null && ok "neovim installed via brew" || error "neovim install failed"
-    elif [[ "$PKG_MANAGER" == "apt" ]]; then
-      if sudo apt update -qq && sudo apt install -y neovim &>/dev/null; then
-        ok "neovim installed via apt"
-        warn "apt's neovim is often outdated — if LazyVim warns about version, install from: https://github.com/neovim/neovim/releases"
-      else
-        error "apt install failed"
-      fi
-    elif [[ "$PKG_MANAGER" == "dnf" ]]; then
-      sudo dnf install -y neovim &>/dev/null && ok "neovim installed via dnf" || error "dnf install failed"
-    elif [[ "$PKG_MANAGER" == "pacman" ]]; then
-      sudo pacman -S --noconfirm neovim &>/dev/null && ok "neovim installed via pacman" || error "pacman install failed"
+    if $NVIM_NEEDS_UPGRADE; then
+      install_or_upgrade_nvim "Upgrade" || true
     else
-      error "No package manager detected. Install neovim manually: https://neovim.io"
-      exit 1
+      install_or_upgrade_nvim "Install" || true
     fi
+
+    hash -r 2>/dev/null || true
     if command -v nvim &>/dev/null; then
-      NVIM_OK=true
+      NVIM_VER_RAW="$(nvim --version 2>/dev/null | head -1)"
+      NVIM_VER="$(echo "$NVIM_VER_RAW" | sed -E 's/^NVIM v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+      if [[ "$NVIM_VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && version_ge "$NVIM_VER" "$NVIM_MIN_VERSION"; then
+        ok "Now running $NVIM_VER ${DIM}(>= $NVIM_MIN_VERSION)${NC}"
+        NVIM_OK=true
+      else
+        error "Installed Neovim still too old: $NVIM_VER (need >= $NVIM_MIN_VERSION)"
+        warn "Manually grab latest: https://github.com/neovim/neovim/releases/latest"
+        exit 1
+      fi
     else
       error "Neovim install failed"
       exit 1
     fi
   else
-    error "Neovim is required"
+    error "Neovim >= $NVIM_MIN_VERSION is required for LazyVim"
     exit 1
   fi
 fi
