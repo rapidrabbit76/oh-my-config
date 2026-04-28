@@ -6,12 +6,13 @@ Portable, cross-platform terminal configs that survive across macOS, Linux, and 
 
 ## Full Setup (all at once)
 
-Install everything — zsh + tmux + yazi:
+Install everything — zsh + tmux + yazi + nvim:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh) && \
 bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/tmux/install.sh) && \
-bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/yazi/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/yazi/install.sh) && \
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/nvim/install.sh)
 ```
 
 Or install each component individually:
@@ -66,6 +67,22 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 
 > [**Full documentation →**](yazi/README.md)
 
+## Neovim
+
+LazyVim-based Neovim setup with an interactive 6-theme picker (Claude, Tokyo Night, Catppuccin, Gruvbox, Rose Pine, Kanagawa) — preview swatches inside the terminal.
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/nvim/install.sh)
+```
+
+or with wget:
+
+```bash
+bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/nvim/install.sh)
+```
+
+> [**Full documentation →**](nvim/README.md)
+
 ## Structure
 
 ```
@@ -92,6 +109,16 @@ oh-my-config/
 │   ├── README.md                 ← detailed docs
 │   ├── scripts/smart-open
 │   └── plugins/mediainfo.yazi/
+├── nvim/                         Neovim config (LazyVim)
+│   ├── init.lua
+│   ├── .neoconf.json
+│   ├── lazyvim.json
+│   ├── stylua.toml
+│   ├── install.sh
+│   ├── README.md                 ← detailed docs
+│   ├── lua/config/               base options/keymaps/autocmds/lazy
+│   ├── lua/plugins/example.lua   LazyVim starter example
+│   └── themes/                   6 colorscheme templates
 └── README.md
 ```
 
