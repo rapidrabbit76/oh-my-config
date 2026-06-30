@@ -21,11 +21,11 @@ desc = "Compress selected files"
 on   = ["c","e"]
 run  = "plugin compress-each"
 desc = "Compress each selected file individually"
-# Max preview (프리뷰 전체화면 토글)
+# Preview pane (프리뷰 창 숨김/표시)
 [[mgr.prepend_keymap]]
 on   = "T"
-run  = "plugin toggle-pane --args=preview"
-desc = "Toggle max preview"
+run  = "plugin toggle-pane min-preview"
+desc = "Show or hide the preview pane"
 
 # Jump to char (문자로 점프)
 [[mgr.prepend_keymap]]
