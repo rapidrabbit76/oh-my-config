@@ -29,6 +29,7 @@ plugins=(
 )
 
 source "$ZSH/oh-my-zsh.sh"
+bindkey '^@' autosuggest-accept
 
 # ─── Completions (single init) ──────────────────────────
 autoload -Uz compinit bashcompinit
