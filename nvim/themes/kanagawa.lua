@@ -3,15 +3,18 @@ return {
     "rebelot/kanagawa.nvim",
     lazy = false,
     priority = 1000,
-    opts = {
-      theme = "wave",
-      transparent = false,
-    },
   },
   {
     "LazyVim/LazyVim",
     opts = {
-      colorscheme = "kanagawa",
+      colorscheme = function()
+        local kanagawa = require("kanagawa")
+        kanagawa.setup({
+          theme = "wave",
+          transparent = false,
+        })
+        kanagawa.load("wave")
+      end,
     },
   },
 }
