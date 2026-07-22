@@ -96,12 +96,6 @@ on   = ["M","t"]
 run  = "plugin mount"
 desc = "Mount/unmount disks"
 
-# Autosession (세션 저장 후 종료)
-[[mgr.prepend_keymap]]
-on   = "Q"
-run  = "plugin autosession -- save-and-quit"
-desc = "Save session and quit"
-
 # fr (ripgrep 파일 내용 검색)
 [[mgr.prepend_keymap]]
 on   = ["g", "f"]

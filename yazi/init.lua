@@ -31,9 +31,6 @@ require("bookmarks"):setup({
 	},
 })
 
--- Autosession
-require("autosession"):setup()
-
 -- Yatline (status bar)
 require("yatline"):setup({
 	display_header_line = true,

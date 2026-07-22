@@ -1,6 +1,6 @@
 # Yazi Configuration
 
-Claude-inspired yazi file manager setup with 26 plugins, cross-platform support (macOS / Linux / SSH), and a portable installer.
+Claude-inspired yazi file manager setup with 25 plugins, cross-platform support (macOS / Linux / SSH), and a portable installer.
 
 ---
 
@@ -41,7 +41,7 @@ cd oh-my-config/yazi
 2. Audit system dependencies — show all missing at once, offer one-click install
 3. Backup existing `~/.config/yazi/` (timestamped)
 4. Copy config files + deploy `smart-open` to `~/.local/bin/`
-5. Install 26 yazi packages (9 official + 17 third-party) + claude-inspired flavor
+5. Install 25 yazi packages (9 official + 16 third-party) + claude-inspired flavor
 6. Write shell integration (`y` wrapper) to `.zshrc` / `.bashrc`
 
 ---
@@ -62,7 +62,7 @@ cd oh-my-config/yazi
 | mount        | Disk mount/unmount manager |
 | mime-ext     | Fast MIME detection by extension |
 
-### Third-party — 17
+### Third-party — 16
 
 | Plugin           | Description                          |
 | ---------------- | ------------------------------------ |
@@ -73,7 +73,6 @@ cd oh-my-config/yazi
 | bookmarks        | Vim-style persistent bookmarks       |
 | duckdb           | CSV/TSV/Parquet table preview        |
 | searchjump       | Flash.nvim-style label jump          |
-| autosession      | Auto session persistence             |
 | projects         | Project state save/load              |
 | what-size        | Directory/selection size calc        |
 | fr               | File content search (ripgrep + bat)  |
@@ -147,7 +146,7 @@ cd oh-my-config/yazi
 | `b d` | Delete bookmark  |
 | `b D` | Delete all       |
 
-### Projects & Sessions
+### Projects
 
 | Key   | Action            |
 | ----- | ----------------- |
@@ -155,7 +154,6 @@ cd oh-my-config/yazi
 | `P l` | Load project      |
 | `P P` | Load last project |
 | `P d` | Delete project    |
-| `Q`   | Save session & quit |
 
 ### Defaults (overridden)
 
