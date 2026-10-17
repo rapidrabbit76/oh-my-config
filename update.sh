@@ -102,14 +102,21 @@ lock() {
 }
 
 update() {
-  local new_rev comp tilde='~'
+  local old_rev
   lock || { echo "oh-my-config: another update is running" >&2; return 1; }
   rm -f "$CACHE_DIR/available"
 
   ensure_clone || return 1
-  OLD_REV=$(git -C "$OMC_HOME" rev-parse HEAD)
+  old_rev=$(git -C "$OMC_HOME" rev-parse HEAD)
   git -C "$OMC_HOME" fetch -q --depth 1 origin main &&
     git -C "$OMC_HOME" reset -q --hard FETCH_HEAD || return 1
+  # Sync with the freshly fetched updater so new sync rules apply on this run
+  bash "$OMC_HOME/update.sh" --sync "$old_rev"
+}
+
+sync_all() {
+  local new_rev comp tilde='~'
+  OLD_REV=$1
   new_rev=$(git -C "$OMC_HOME" rev-parse HEAD)
 
   while read -r comp; do
@@ -119,6 +126,8 @@ update() {
   if (( ${#CHANGED[@]} )); then
     [[ "$new_rev" == "$OLD_REV" ]] && echo "oh-my-config ${new_rev:0:7}" || echo "oh-my-config ${OLD_REV:0:7} → ${new_rev:0:7}"
     printf '  updated %s\n' "${CHANGED[@]/#$HOME/$tilde}"
+  elif [[ "$new_rev" != "$OLD_REV" ]]; then
+    echo "oh-my-config ${OLD_REV:0:7} → ${new_rev:0:7} (no config files changed)"
   else
     echo "oh-my-config is up to date (${new_rev:0:7})"
   fi
@@ -164,6 +173,7 @@ main() {
   case "${1:-}" in
     --auto) auto ;;
     --check) check ;;
+    --sync) sync_all "${2:-}" ;;
     --register) register "${2:-}" ;;
     "") update ;;
     *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; return 1 ;;
