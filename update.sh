@@ -2,13 +2,14 @@
 # oh-my-config updater — keeps a clone of the repo and re-syncs installed configs.
 #
 #   update.sh                     Update now (fetch + sync every installed component)
-#   update.sh --auto              Shell startup hook: at most once a day, in the background
+#   update.sh --auto              Shell startup hook: asks "Update now? [Y/n]" when a check found
+#                                 a new version (checks run once a day in the background)
 #   update.sh --register <name>   Called by installers (tmux | yazi | nvim)
 #
 # Only config files are synced. Packages, ~/.zshrc and *.local files are never touched.
 # Local edits are kept; if upstream changed the same file, the local copy is saved as
 # <file>.bak.<timestamp> and replaced.
-# Disable the startup check with: export OMC_DISABLE_AUTO_UPDATE=1
+# Disable the startup prompt with: export OMC_DISABLE_AUTO_UPDATE=1
 
 REPO_URL="https://github.com/rapidrabbit76/oh-my-config.git"
 OMC_HOME="${OMC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/oh-my-config}"
@@ -79,7 +80,7 @@ install_hook() {
   local rc="$HOME/.zshrc" home='$HOME'
   [[ -f "$rc" ]] || rc="$HOME/.bashrc"
   grep -qF "$HOOK_MARKER" "$rc" 2>/dev/null && return 0
-  printf '\n%s (config files only, once a day in the background)\n[[ -f "%s/update.sh" ]] && bash "%s/update.sh" --auto\n' \
+  printf '\n%s (asks before updating config files)\n[[ -f "%s/update.sh" ]] && bash "%s/update.sh" --auto\n' \
     "$HOOK_MARKER" "${OMC_HOME/#$HOME/$home}" "${OMC_HOME/#$HOME/$home}" >>"$rc"
 }
 
@@ -91,28 +92,29 @@ register() {
   install_hook
 }
 
-update() {
-  local quiet=$1 new_rev comp tilde='~'
+lock() {
   mkdir -p "$CACHE_DIR"
-  mkdir "$CACHE_DIR/lock" 2>/dev/null || return 0
+  mkdir "$CACHE_DIR/lock" 2>/dev/null || return 1
   trap 'rmdir "$CACHE_DIR/lock" 2>/dev/null' EXIT
   date +%s >"$CACHE_DIR/last-check"
+}
+
+update() {
+  local new_rev comp tilde='~'
+  lock || { echo "oh-my-config: another update is running" >&2; return 1; }
+  rm -f "$CACHE_DIR/available"
 
   ensure_clone || return 1
   OLD_REV=$(git -C "$OMC_HOME" rev-parse HEAD)
   git -C "$OMC_HOME" fetch -q --depth 1 origin main &&
     git -C "$OMC_HOME" reset -q --hard FETCH_HEAD || return 1
   new_rev=$(git -C "$OMC_HOME" rev-parse HEAD)
-  [[ "$quiet" == 1 && "$new_rev" == "$OLD_REV" ]] && return 0
 
   while read -r comp; do
     case "$comp" in tmux | yazi | nvim) "sync_$comp" ;; esac
   done <"$COMPONENTS_FILE"
 
-  if [[ "$quiet" == 1 ]]; then
-    (( ${#CHANGED[@]} )) &&
-      echo "oh-my-config updated (${OLD_REV:0:7} → ${new_rev:0:7}): ${#CHANGED[@]} file(s) synced" >"$CACHE_DIR/notice"
-  elif (( ${#CHANGED[@]} )); then
+  if (( ${#CHANGED[@]} )); then
     [[ "$new_rev" == "$OLD_REV" ]] && echo "oh-my-config ${new_rev:0:7}" || echo "oh-my-config ${OLD_REV:0:7} → ${new_rev:0:7}"
     printf '  updated %s\n' "${CHANGED[@]/#$HOME/$tilde}"
   else
@@ -120,25 +122,49 @@ update() {
   fi
 }
 
+# Background: only look for a new version, never change anything
+check() {
+  local new_rev
+  lock || return 0
+  ensure_clone || return 1
+  git -C "$OMC_HOME" fetch -q --depth 1 origin main || return 1
+  new_rev=$(git -C "$OMC_HOME" rev-parse FETCH_HEAD)
+  [[ "$new_rev" == "$(git -C "$OMC_HOME" rev-parse HEAD)" ]] && return 0
+  [[ "$new_rev" == "$(cat "$CACHE_DIR/skipped" 2>/dev/null)" ]] && return 0
+  echo "$new_rev" >"$CACHE_DIR/available"
+}
+
+# Shell startup: ask about a version found by an earlier check, then maybe start a new check
 auto() {
-  if [[ -f "$CACHE_DIR/notice" ]]; then
-    cat "$CACHE_DIR/notice"
-    rm -f "$CACHE_DIR/notice"
-  fi
   [[ "${OMC_DISABLE_AUTO_UPDATE:-}" == 1 ]] && return 0
-  local last
+  [[ -t 0 && -t 1 ]] || return 0
+  local new_rev answer last tilde='~'
+  if [[ -f "$CACHE_DIR/available" ]]; then
+    new_rev=$(cat "$CACHE_DIR/available")
+    printf '[oh-my-config] Update available (%s → %s). Update now? [Y/n] ' \
+      "$(git -C "$OMC_HOME" rev-parse --short HEAD)" "${new_rev:0:7}"
+    read -r answer
+    if [[ "$answer" == [nN]* ]]; then
+      rm -f "$CACHE_DIR/available"
+      echo "$new_rev" >"$CACHE_DIR/skipped"
+      echo "[oh-my-config] Skipped. Update later with: bash ${OMC_HOME/#$HOME/$tilde}/update.sh"
+    else
+      update
+    fi
+    return 0
+  fi
   last=$(cat "$CACHE_DIR/last-check" 2>/dev/null || echo 0)
   (( $(date +%s) - last < INTERVAL )) && return 0
-  nohup bash "$0" --background >/dev/null 2>&1 &
+  (nohup bash "$0" --check </dev/null >/dev/null 2>&1 &)
 }
 
 main() {
   case "${1:-}" in
     --auto) auto ;;
-    --background) update 1 ;;
+    --check) check ;;
     --register) register "${2:-}" ;;
-    "") update 0 ;;
-    *) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; return 1 ;;
+    "") update ;;
+    *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; return 1 ;;
   esac
 }
 

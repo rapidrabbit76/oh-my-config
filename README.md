@@ -86,13 +86,13 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 ## Auto-update
 
 The tmux, yazi and nvim installers keep a clone of this repo in `~/.local/share/oh-my-config` and add one line to `~/.zshrc`.
-On shell start it checks GitHub at most once a day, in the background, and syncs the config files of the components you installed.
-The next shell prints what changed.
+Like oh-my-zsh, it asks before updating: once a day it checks GitHub in the background, and when a new version exists
+the next shell asks `[oh-my-config] Update available (…). Update now? [Y/n]`. Answering `n` skips that version.
 
 - Only config files are synced: no package installs, and `~/.zshrc` / `*.local` files are never touched.
 - Local edits are kept. If upstream changed the same file, your copy is saved as `<file>.bak.<timestamp>` first.
 - Update now: `bash ~/.local/share/oh-my-config/update.sh`
-- Turn off: `export OMC_DISABLE_AUTO_UPDATE=1` in `~/.zshrc.local`
+- Turn off the prompt: `export OMC_DISABLE_AUTO_UPDATE=1` in `~/.zshrc.local`
 
 ## Structure
 

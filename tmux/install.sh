@@ -298,7 +298,7 @@ fi
 
 # ─── Auto-update ────────────────────────────────────────
 if bash "$SCRIPT_DIR/../update.sh" --register tmux 2>/dev/null; then
-  ok "Auto-update on ${DIM}(config files, once a day at shell start · run now: bash ~/.local/share/oh-my-config/update.sh)${NC}"
+  ok "Update check on ${DIM}(asks at shell start when a new version exists · update now: bash ~/.local/share/oh-my-config/update.sh)${NC}"
 else
   warn "Auto-update setup failed — re-run the installer later"
 fi
