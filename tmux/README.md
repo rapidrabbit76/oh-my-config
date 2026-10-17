@@ -37,7 +37,7 @@ cd oh-my-config/tmux
 
 ## What the installer does
 
-1. Check for tmux / git / Nerd Font
+1. Check for tmux / git / Nerd Font (offers a brew upgrade when tmux < 3.6)
 2. Install tmux if missing (brew / apt)
 3. Backup existing `~/.tmux.conf` (timestamped)
 4. Install managed config to `~/.config/oh-my-config/tmux/.tmux.conf`
@@ -156,7 +156,7 @@ Work → Break transition is automatic (25min work → 5min break).
 
 ## Requirements
 
-- **tmux** >= 3.2
+- **tmux** >= 3.6 (older versions break decomposed Korean filenames, e.g. in yazi)
 - **git** (for TPM)
 - **Nerd Font** (for icons) — e.g., Hack Nerd Font, D2Coding Nerd Font
 - Terminal with true color support

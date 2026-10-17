@@ -132,6 +132,20 @@ ok "Detected ${BOLD}$OS${NC}"
 if command -v tmux &>/dev/null; then
   TMUX_VERSION=$(tmux -V 2>/dev/null)
   ok "Found $TMUX_VERSION"
+  # tmux < 3.6 mis-measures decomposed (NFD) Hangul, which macOS filenames often use,
+  # so Korean names render broken in TUIs like yazi.
+  TMUX_VERSION_NUM=$(echo "$TMUX_VERSION" | grep -Eo '[0-9]+\.[0-9]+' | head -1)
+  if [[ -n "$TMUX_VERSION_NUM" ]] && ! printf '3.6\n%s\n' "$TMUX_VERSION_NUM" | sort -V -C; then
+    warn "tmux < 3.6 breaks decomposed Korean (Hangul Jamo) text"
+    if [[ "$PKG_MANAGER" == "brew" ]]; then
+      read -rp "  Upgrade tmux via brew? [Y/n] " answer
+      if [[ "${answer:-Y}" =~ ^[Yy]?$ ]]; then
+        brew upgrade tmux && ok "tmux upgraded — restart the tmux server (tmux kill-server) to use it"
+      fi
+    else
+      echo -e "       ${DIM}Upgrade tmux to 3.6 or newer${NC}"
+    fi
+  fi
 else
   warn "tmux not found"
   if [[ "$PKG_MANAGER" == "brew" ]]; then
