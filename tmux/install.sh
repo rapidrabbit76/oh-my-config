@@ -290,7 +290,7 @@ echo ""
 echo -e "${BOLD}  [5/5] Reload${NC}"
 echo ""
 
-if pgrep -x tmux &>/dev/null; then
+if tmux info &>/dev/null; then
   tmux source-file "$TMUX_CONF" 2>/dev/null && ok "Config reloaded" || warn "Reload failed — reload manually: tmux source-file ~/.tmux.conf"
 else
   ok "tmux not running — config will apply on next launch"
