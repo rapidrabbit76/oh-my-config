@@ -233,7 +233,7 @@ echo ""
 
 mkdir -p "$TMUX_SCRIPTS" "$MANAGED_DIR"
 
-ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh")
+ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh" "tab_sidebar.sh")
 progress_start ${#ITEMS[@]}
 
 cp "$SCRIPT_DIR/.tmux.conf" "$MANAGED_CONF"
@@ -258,7 +258,7 @@ else
   progress_tick ".tmux.conf.local"
 fi
 
-for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh; do
+for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh; do
   cp "$SCRIPT_DIR/scripts/$script" "$TMUX_SCRIPTS/$script"
   chmod +x "$TMUX_SCRIPTS/$script"
   progress_tick "$script"

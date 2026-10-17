@@ -77,9 +77,17 @@ If the installer finds an existing custom `~/.tmux.conf`, it migrates that file 
 
 ## Status Bar
 
+Two lines at the top, browser style — tabs get the whole first line, widgets sit below.
+
 ```
- session │ windows │ dir │  git │ 󰛳 ↓1K ↑0B (2.4G) │  CPU │  RAM │ 󰋊 disk │ 🔋 bat │ 󰩟 IP │ 🍅 pomo │  date
+ session │ 0 tab │ 1 tab │ 2 tab …
+                     dir │  git │ 󰛳 ↓1K ↑0B (2.4G) │  CPU │  RAM │ 󰋊 disk │ 🔋 bat │ 󰩟 IP │ 🍅 pomo │  date
 ```
+
+- The current tab has a peach number and a lighter background; long names are cut with `…`.
+- Unnamed tabs follow the shell's folder, or the running program (`nvim`, `yazi`, …). A name set with `Prefix + ,` sticks.
+- `Prefix + b` switches to a **side tab list**: a 28-column panel on the left of every window
+  (jump with a number key or a click) and a single status line. Press it again to return.
 
 | Segment | Color (Mocha) | Script |
 | --- | --- | --- |
@@ -131,6 +139,8 @@ These are shipped in the default `~/.tmux.conf.local` template so they survive r
 | `Prefix + "` | Split vertical |
 | `Prefix + L` | Last window |
 | `Prefix + Tab` | Yazi file explorer (50% split) |
+| `Prefix + f` | Search tabs in every session with fzf (falls back to `choose-tree`) |
+| `Prefix + b` | Toggle side tab list |
 | `Prefix + r` | Reload config |
 
 ### Pomodoro Timer
