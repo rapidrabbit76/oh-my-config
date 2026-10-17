@@ -119,3 +119,6 @@ command -v starship &>/dev/null && eval "$(starship init zsh)"
 
 # ─── Local overrides (secrets, machine-specific) ───────
 [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
+
+# oh-my-config auto-update (config files only, once a day in the background)
+[[ -f "$HOME/.local/share/oh-my-config/update.sh" ]] && bash "$HOME/.local/share/oh-my-config/update.sh" --auto

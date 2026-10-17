@@ -266,6 +266,7 @@ echo ""
 mkdir -p "$YAZI_CONFIG_DIR/plugins/mediainfo.yazi"
 mkdir -p "$YAZI_CONFIG_DIR/plugins/compress-each.yazi"
 
+# Keep in sync with sync_yazi in ../update.sh
 CONFIG_FILES=(yazi.toml keymap.toml theme.toml init.lua)
 progress_start $((${#CONFIG_FILES[@]} + 3))
 
@@ -387,6 +388,13 @@ elif [[ -f "$BASHRC" ]]; then
     echo "$SHELL_SNIPPET" >> "$BASHRC"
     ok "Added to .bashrc ${DIM}(run: source ~/.bashrc)${NC}"
   fi
+fi
+
+# ─── Auto-update ────────────────────────────────────────
+if bash "$SCRIPT_DIR/../update.sh" --register yazi 2>/dev/null; then
+  ok "Auto-update on ${DIM}(config files, once a day at shell start · run now: bash ~/.local/share/oh-my-config/update.sh)${NC}"
+else
+  warn "Auto-update setup failed — re-run the installer later"
 fi
 
 # ─── Done ────────────────────────────────────────────────

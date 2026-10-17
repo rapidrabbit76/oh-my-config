@@ -258,6 +258,7 @@ else
   progress_tick ".tmux.conf.local"
 fi
 
+# Keep in sync with sync_tmux in ../update.sh
 for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh; do
   cp "$SCRIPT_DIR/scripts/$script" "$TMUX_SCRIPTS/$script"
   chmod +x "$TMUX_SCRIPTS/$script"
@@ -293,6 +294,13 @@ if pgrep -x tmux &>/dev/null; then
   tmux source-file "$TMUX_CONF" 2>/dev/null && ok "Config reloaded" || warn "Reload failed — reload manually: tmux source-file ~/.tmux.conf"
 else
   ok "tmux not running — config will apply on next launch"
+fi
+
+# ─── Auto-update ────────────────────────────────────────
+if bash "$SCRIPT_DIR/../update.sh" --register tmux 2>/dev/null; then
+  ok "Auto-update on ${DIM}(config files, once a day at shell start · run now: bash ~/.local/share/oh-my-config/update.sh)${NC}"
+else
+  warn "Auto-update setup failed — re-run the installer later"
 fi
 
 # ─── Done ────────────────────────────────────────────────

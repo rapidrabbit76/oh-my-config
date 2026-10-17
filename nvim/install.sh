@@ -585,6 +585,7 @@ echo ""
 
 mkdir -p "$NVIM_DIR/lua/config" "$NVIM_DIR/lua/plugins"
 
+# Keep in sync with sync_nvim in ../update.sh
 DEPLOY_FILES=(
   "init.lua"
   ".neoconf.json"
@@ -645,6 +646,13 @@ if [[ "${answer:-Y}" =~ ^[Yy]?$ ]]; then
   fi
 else
   ok "Skipped — plugins will install on first nvim launch"
+fi
+
+# ─── Auto-update ────────────────────────────────────────
+if bash "$SCRIPT_DIR/../update.sh" --register nvim 2>/dev/null; then
+  ok "Auto-update on ${DIM}(config files, once a day at shell start · run now: bash ~/.local/share/oh-my-config/update.sh)${NC}"
+else
+  warn "Auto-update setup failed — re-run the installer later"
 fi
 
 echo ""

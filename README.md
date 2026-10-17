@@ -83,6 +83,17 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 
 > [**Full documentation →**](nvim/README.md)
 
+## Auto-update
+
+The tmux, yazi and nvim installers keep a clone of this repo in `~/.local/share/oh-my-config` and add one line to `~/.zshrc`.
+On shell start it checks GitHub at most once a day, in the background, and syncs the config files of the components you installed.
+The next shell prints what changed.
+
+- Only config files are synced: no package installs, and `~/.zshrc` / `*.local` files are never touched.
+- Local edits are kept. If upstream changed the same file, your copy is saved as `<file>.bak.<timestamp>` first.
+- Update now: `bash ~/.local/share/oh-my-config/update.sh`
+- Turn off: `export OMC_DISABLE_AUTO_UPDATE=1` in `~/.zshrc.local`
+
 ## Structure
 
 ```
@@ -99,7 +110,8 @@ oh-my-config/
 │       ├── net_speed.sh
 │       ├── disk_usage.sh
 │       ├── public_ip.sh
-│       └── pomodoro.sh
+│       ├── pomodoro.sh
+│       └── tab_sidebar.sh        side tab list (Prefix + b)
 ├── yazi/                         Yazi file manager config
 │   ├── yazi.toml
 │   ├── keymap.toml
@@ -119,6 +131,7 @@ oh-my-config/
 │   ├── lua/config/               base options/keymaps/autocmds/lazy
 │   ├── lua/plugins/example.lua   LazyVim starter example
 │   └── themes/                   6 colorscheme templates
+├── update.sh                     auto-update (config sync)
 └── README.md
 ```
 
