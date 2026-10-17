@@ -233,7 +233,7 @@ echo ""
 
 mkdir -p "$TMUX_SCRIPTS" "$MANAGED_DIR"
 
-ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh" "tab_sidebar.sh")
+ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh" "tab_sidebar.sh" "detect_host.sh")
 progress_start ${#ITEMS[@]}
 
 cp "$SCRIPT_DIR/.tmux.conf" "$MANAGED_CONF"
@@ -259,11 +259,13 @@ else
 fi
 
 # Keep in sync with sync_tmux in ../update.sh
-for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh; do
+for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh detect_host.sh; do
   cp "$SCRIPT_DIR/scripts/$script" "$TMUX_SCRIPTS/$script"
   chmod +x "$TMUX_SCRIPTS/$script"
   progress_tick "$script"
 done
+# One-time host detection (e.g. hide the battery widget on servers)
+"$TMUX_SCRIPTS/detect_host.sh"
 
 # ─── [4/5] TPM ──────────────────────────────────────────
 echo ""
@@ -283,6 +285,13 @@ if [[ -d "$CATPPUCCIN_DIR" ]]; then
 else
   git clone -b v2.1.3 --depth 1 https://github.com/catppuccin/tmux.git "$CATPPUCCIN_DIR" 2>/dev/null
   ok "Catppuccin theme installed ${DIM}(v2.1.3)${NC}"
+fi
+
+# Install the remaining plugins (cpu, battery, resurrect, continuum) so the widgets work right away
+if "$TPM_DIR/bin/install_plugins" &>/dev/null; then
+  ok "Plugins installed"
+else
+  warn "Plugin install failed — press Prefix + I inside tmux"
 fi
 
 # ─── [5/5] Reload ───────────────────────────────────────

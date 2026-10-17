@@ -51,6 +51,8 @@ sync_tmux() {
     sync_file "tmux/scripts/${f##*/}" "$HOME/.tmux/scripts/${f##*/}"
     chmod +x "$HOME/.tmux/scripts/${f##*/}"
   done
+  # Installs from before detect_host.sh existed: detect once
+  [[ -f "$HOME/.config/oh-my-config/tmux/host.conf" ]] || "$HOME/.tmux/scripts/detect_host.sh"
   if (( ${#CHANGED[@]} > before )) && tmux info &>/dev/null; then
     tmux source-file "$HOME/.tmux.conf" &>/dev/null
   fi

@@ -96,7 +96,7 @@ Two lines at the top, browser style — tabs get the whole first line, widgets s
 | CPU | Blue `#89b4fa` | tmux-cpu plugin |
 | RAM | Yellow `#f9e2af` | tmux-cpu plugin |
 | Disk usage | Peach `#fab387` | `disk_usage.sh` |
-| Battery | Pink `#f5c2e7` | tmux-battery plugin |
+| Battery | Pink `#f5c2e7` | tmux-battery plugin (hidden on hosts without a battery, detected once at install) |
 | Public IP | Lavender `#b4befe` | `public_ip.sh` (5min cache) |
 | Pomodoro | Red `#f38ba8` | `pomodoro.sh` |
 

@@ -488,6 +488,16 @@ else
   ok "All tools already installed"
 fi
 
+# Minimal Ubuntu images exclude /usr/share/doc, which drops fzf's zsh key bindings
+# that the oh-my-zsh fzf plugin sources ("no such file or directory: .../key-bindings.zsh")
+if [[ "$PKG_MANAGER" == "apt" ]] && dpkg -s fzf &>/dev/null &&
+  [[ ! -f /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
+  printf '# Keep fzf shell integration (oh-my-zsh fzf plugin) despite the /usr/share/doc exclude\npath-include=/usr/share/doc/fzf/examples/*\n' |
+    sudo tee /etc/dpkg/dpkg.cfg.d/fzf-examples >/dev/null &&
+    sudo apt install -y --reinstall fzf &>/dev/null &&
+    ok "Restored fzf shell integration files"
+fi
+
 # ═══════════════════════════════════════════════════════════
 # [4/7] Oh My Zsh + plugins
 # ═══════════════════════════════════════════════════════════

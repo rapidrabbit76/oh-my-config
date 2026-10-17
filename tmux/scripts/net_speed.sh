@@ -11,7 +11,11 @@ detect_iface() {
   if [[ "$OS" == "Darwin" ]]; then
     echo "en0"
   else
-    ip route 2>/dev/null | awk '/default/{print $5; exit}' || echo "eth0"
+    local iface
+    iface=$(ip route 2>/dev/null | awk '/default/{print $5; exit}')
+    # Minimal images (e.g. containers) may not ship iproute2
+    [[ -z "$iface" ]] && iface=$(awk '$2 == "00000000" {print $1; exit}' /proc/net/route 2>/dev/null)
+    echo "${iface:-eth0}"
   fi
 }
 
