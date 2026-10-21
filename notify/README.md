@@ -48,6 +48,28 @@ Bash: git push origin main
 
 The default pictures are the GitHub avatars of the anthropics and openai organizations.
 
+## Answering from Discord (away)
+
+Switch a session to **away** and Discord works both ways:
+
+| In the session | In Discord |
+|---|---|
+| A question (Claude's AskUserQuestion) | The question with 1️⃣ 2️⃣ … : react to pick (several, then ✅, for a multi-select), or reply with your own answer. The terminal's dialog stays open; whichever answers first wins. |
+| An approval (Claude's permission prompt, Codex's PermissionRequest) | ✅ allow, ❌ deny, or reply to deny with a message (`ok` / `ㅇㅇ` allow). The terminal's prompt shows after 10 minutes with no answer. |
+| — | Reply to an alert: the text is sent to that session as a prompt (Claude Code: as a message; Codex: typed into its tmux pane). A message that is not a reply goes to the newest away session. 📨 under it: delivered; ⚠️: no away session took it. |
+
+Switching: Claude Code `[ ] away` in the sidebar (or `a`) or `/away`; Codex `a` in the tmux sidebar, or `agent-notify codex away` in the project folder.
+
+It needs a Discord **bot** besides the webhook: the webhook still posts (each agent's name and avatar), the bot reads your reactions and replies.
+
+1. discord.com/developers → New Application → **Bot** → Reset Token. Under Privileged Gateway Intents turn on **Message Content Intent**.
+2. OAuth2 → URL Generator → `bot`, with View Channels, Read Message History, Add Reactions, Send Messages; invite it to the server of the alert channel.
+3. `agent-notify setup` → paste the bot token (hidden), then `agent-notify pair` and react ✅ to its message: only that account's answers count from then on.
+
+A background process, `agent-notify bridge`, reads the channel every 3 seconds (Discord's REST API, no open port) while a session is away or a question waits, and exits two minutes after the last one. `agent-notify bridge status|stop`.
+
+Safety: only the paired account is heard; only a session switched to away takes a prompt; everything passes through files only you can read, removed once used. Anyone who can post as that account can approve tool use and prompt your agents, so keep the account and the bot token to yourself.
+
 ## When a channel fails
 
 Nothing in the agent waits on it or breaks:

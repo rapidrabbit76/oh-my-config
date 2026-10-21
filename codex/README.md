@@ -49,7 +49,7 @@ my-project
 ⎇ main worktree                           or: worktree <name>
 gpt-5.5 · high · 8 turns · 1h20m
 last turn 21s                             or: ● working
-[ ] alerts Discord / ntfy (n)             n: alerts for this thread
+[ ] alerts  [ ] away (n / a)               n: alerts, a: away, for this thread
 
 Context
 █████████░░░░░░░░░░░░░░░ 40%
@@ -73,7 +73,7 @@ It picks the newest thread whose folder is the pane's folder (a CLI thread first
 
 ## Alerts
 
-`n` in the sidebar turns on Discord / ntfy alerts for the thread it shows: one when a turn ends, and one when an approval has waited 30 seconds. Without the sidebar, `agent-notify codex on` in the project folder does the same for its newest thread. See [notify](../notify/README.md); a channel that is down never slows or breaks Codex.
+`a` in the sidebar switches the thread to away: approvals go to Discord too (✅ / ❌), and a reply to its alert is typed into the Codex pane; see [Answering from Discord](../notify/README.md#answering-from-discord-away). `n` in the sidebar turns on Discord / ntfy alerts for the thread it shows: one when a turn ends, and one when an approval has waited 30 seconds. Without the sidebar, `agent-notify codex on` in the project folder does the same for its newest thread. See [notify](../notify/README.md); a channel that is down never slows or breaks Codex.
 
 ## Structure
 

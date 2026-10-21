@@ -38,7 +38,8 @@ function world(on: On, status = 0) {
   on('process.run', (_, e) => {
     const isNotify = e.argv[0] === '/bin/sh' && (e.argv[2] ?? '').includes('agent-notify')
     const args = e.argv.slice(4)
-    if (isNotify && args[0] === 'send') sent.push([...args])
+    // `send --session <id> claude …`: recorded without the session flag.
+    if (isNotify && args[0] === 'send') sent.push(args[1] === '--session' ? [args[0], ...args.slice(3)] : [...args])
     const exitCode = isNotify ? (args[0] === 'status' ? status : 0) : 1
     return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -50,6 +51,7 @@ function world(on: On, status = 0) {
   on('session.cwd', () => ({ value: '/work/my-project' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.turns', () => ({ value: 3 }))
+  on('session.id', () => ({ value: 'sess-1' }))
   on('tool.call', () => ({ result: {} }))
   on('command.run', () => ({}))
   return { sent, toasts }

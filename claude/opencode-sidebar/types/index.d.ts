@@ -59,6 +59,8 @@ declare module 'claude-code' {
       lastTurn: Turn | null
       // Alerts to Discord / ntfy through agent-notify, for this session.
       notify: boolean
+      // Away: questions, approvals and prompts from Discord too (agent-notify's bridge).
+      away: boolean
     }
   }
 }

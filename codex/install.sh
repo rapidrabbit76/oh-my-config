@@ -75,7 +75,8 @@ timeout = 10
 [[hooks.PermissionRequest.hooks]]
 type = "command"
 command = "$cmd"
-timeout = 10
+# Away, it waits up to 10 minutes for an approval from Discord.
+timeout = 900
 $ALERTS_END
 TOML
 }
@@ -246,11 +247,18 @@ if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' &>/dev/null; t
   warn "Alerts need Python 3.9 or newer (python3) — until then they stay off, harmlessly"
 fi
 
-if grep -qxF "$ALERTS_BEGIN" "$CONFIG"; then
+current=$(awk -v b="$ALERTS_BEGIN" -v e="$ALERTS_END" '$0 == b { on = 1 } on { print } $0 == e { on = 0 }' "$CONFIG")
+if [[ "$current" == "$(alerts_block)" ]]; then
   ok "Alert hooks already in ${DIM}${CONFIG/#$HOME/~}${NC}"
 else
   backup="$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
   cp -p "$CONFIG" "$backup"
+  # An older block (another timeout, say) is replaced, not added to.
+  if [[ -n "$current" ]]; then
+    tmp="$(mktemp)"
+    remove_block "$ALERTS_BEGIN" "$ALERTS_END" >"$tmp" && cat "$tmp" >"$CONFIG"
+    rm -f "$tmp"
+  fi
   { [[ -s "$CONFIG" ]] && echo ""; alerts_block; } >>"$CONFIG"
   if config_loads; then
     ok "Added Stop / PermissionRequest hooks to ${DIM}${CONFIG/#$HOME/~}${NC} (backup kept)"

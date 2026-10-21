@@ -15,6 +15,7 @@ const mcp = atom({ plugin: 'opencode-sidebar', key: 'mcp' } as const, [])
 const parts = atom({ plugin: 'opencode-sidebar', key: 'parts' } as const, [])
 const lastTurn = atom({ plugin: 'opencode-sidebar', key: 'lastTurn' } as const, null)
 const notify = atom({ plugin: 'opencode-sidebar', key: 'notify' } as const, false)
+const away = atom({ plugin: 'opencode-sidebar', key: 'away' } as const, false)
 
 const TICK_MS = 15_000
 // The PR is fetched over the network, so on every fourth tick only.
@@ -26,6 +27,13 @@ const CONTEXT_WARN = 80
 // "waiting for you" and is sent.
 const WAIT_MS = 30_000
 const ANSWER_MAX = 2000
+// Away: how long a question or an approval waits for an answer from Discord.
+// An approval holds the terminal's prompt back that long, a question does not.
+const QUESTION_S = 6 * 3600
+const APPROVE_S = 600
+const INBOX_MS = 3000
+// $.process.run runs ten minutes at most, so a long wait is several calls.
+const ASK_CHUNK_S = 540
 
 const kilo = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`)
 
@@ -57,6 +65,7 @@ let configuredMcp: string[] = []
 let turnStartedAt = 0
 let turnTools = 0
 let waitTimer: { cancel: () => void } | undefined
+let inboxTick: { cancel: () => void } | undefined
 
 // Each figure on its own, so one the engine cannot answer (usage before the
 // first response, say) leaves the rest drawn instead of "Loading…" forever.
@@ -217,16 +226,26 @@ async function refreshPr($: EngineInterface) {
 // is missing or fails, nothing happens here.
 const AGENT_NOTIFY = 'n="$HOME/.local/bin/agent-notify"; [ -x "$n" ] || exit 3; exec "$n" "$@"'
 
-const agentNotify = async ($: EngineInterface, args: string[]) => {
+type Ran = { exitCode: number; stdout: string }
+
+const agentNotify = async (
+  $: EngineInterface,
+  args: string[],
+  init: { stdin?: string; timeoutMs?: number } = {},
+): Promise<Ran> => {
   try {
-    const ran = await $.process.run(['/bin/sh', '-c', AGENT_NOTIFY, 'sh', ...args], { timeoutMs: 5000 })
-    return ran.exitCode
+    const ran = await $.process.run(['/bin/sh', '-c', AGENT_NOTIFY, 'sh', ...args], {
+      timeoutMs: init.timeoutMs ?? 5000,
+      ...(init.stdin === undefined ? {} : { stdin: init.stdin }),
+    })
+    return { exitCode: ran.exitCode, stdout: ran.stdout }
   } catch {
-    return -1
+    return { exitCode: -1, stdout: '' }
   }
 }
 
 const isNotifying = ($: EngineInterface) => read($, notify).catch(() => false)
+const isAway = ($: EngineInterface) => read($, away).catch(() => false)
 
 const whereOf = async ($: EngineInterface) => {
   const [now, repo] = await Promise.all([read($, info), read($, git)])
@@ -235,7 +254,9 @@ const whereOf = async ($: EngineInterface) => {
 
 async function sendAlert($: EngineInterface, kind: 'done' | 'wait' | 'error', title: string, body: string, meta: string) {
   if (!(await isNotifying($))) return
-  await agentNotify($, ['send', 'claude', kind, title, body.slice(0, ANSWER_MAX), meta])
+  // With the session's id, a reply to the alert in Discord comes back here.
+  const id = await $.session.id()
+  await agentNotify($, ['send', '--session', id, 'claude', kind, title, body.slice(0, ANSWER_MAX), meta])
 }
 
 const cancelWait = () => {
@@ -256,18 +277,88 @@ function armWait($: EngineInterface, body: string) {
   })
 }
 
+type RemoteAnswer = { kind?: string; value?: string; values?: string[]; pending?: string }
+
+// A question or an approval posted to Discord once, waited on in chunks;
+// null when no answer came (timed out, answered in the terminal, nothing set
+// up to hear back).
+async function askRemote($: EngineInterface, question: Record<string, unknown>, seconds: number) {
+  const session = await $.session.id()
+  let resume = ''
+  for (let left = seconds; left > 0; ) {
+    const chunk = Math.min(left, ASK_CHUNK_S)
+    left -= chunk
+    const ran = await agentNotify($, ['ask'], {
+      stdin: JSON.stringify({ agent: 'claude', session, ...question, timeout: chunk, final: left <= 0, resume }),
+      timeoutMs: (chunk + 30) * 1000,
+    })
+    let answer: RemoteAnswer = {}
+    try {
+      answer = JSON.parse(ran.stdout || '{}') as RemoteAnswer
+    } catch {}
+    if (answer.kind) return answer
+    if (!answer.pending) return null
+    resume = answer.pending
+  }
+  return null
+}
+
+// Messages from Discord (replies to this session's alerts, or any message
+// while it is the newest away session) become prompts.
+async function drainInbox($: EngineInterface) {
+  const ran = await agentNotify($, ['inbox', 'claude', await $.session.id()])
+  let texts: unknown = []
+  try {
+    texts = JSON.parse(ran.stdout || '[]')
+  } catch {}
+  if (!Array.isArray(texts)) return
+  for (const text of texts) {
+    if (typeof text === 'string' && text.trim() !== '') await $.prompt.submit({ text })
+  }
+}
+
+function watchInbox($: EngineInterface, on: boolean) {
+  inboxTick?.cancel()
+  inboxTick = undefined
+  if (on) inboxTick = $.clock.every(INBOX_MS, () => void drainInbox($).catch(() => undefined))
+}
+
+// The switch agent-notify reads: its bridge hands Discord messages only to an away session.
+async function setModes($: EngineInterface, alerts: boolean, isAwayOn: boolean) {
+  await update($, notify, () => alerts || isAwayOn)
+  await update($, away, () => isAwayOn)
+  if (!alerts && !isAwayOn) cancelWait()
+  watchInbox($, isAwayOn)
+  const mode = isAwayOn ? 'away' : alerts ? 'alerts' : 'off'
+  await agentNotify($, ['switch', 'claude', await $.session.id(), mode])
+}
+
 async function toggleNotify($: EngineInterface) {
   const on = !(await isNotifying($))
-  await update($, notify, () => on)
+  await setModes($, on, false)
   if (!on) {
-    cancelWait()
     $.ui.toast('Alerts off for this session')
     return
   }
   const status = await agentNotify($, ['status'])
-  if (status === 3) $.ui.toast('Alerts on, but agent-notify is not installed (oh-my-config claude/install.sh)')
-  else if (status !== 0) $.ui.toast('Alerts on, but no channel is set: run `agent-notify setup` in a shell')
+  if (status.exitCode === 3) $.ui.toast('Alerts on, but agent-notify is not installed (oh-my-config claude/install.sh)')
+  else if (status.exitCode !== 0) $.ui.toast('Alerts on, but no channel is set: run `agent-notify setup` in a shell')
   else $.ui.toast('Alerts on: Discord / ntfy when a turn ends or waits for you')
+}
+
+async function toggleAway($: EngineInterface) {
+  const on = !(await isAway($))
+  await setModes($, true, on)
+  if (!on) {
+    $.ui.toast('Away off: alerts only')
+    return
+  }
+  const status = await agentNotify($, ['status'])
+  if (!status.stdout.includes('answers on')) {
+    $.ui.toast('Away on, but Discord cannot answer yet: add a bot token (`agent-notify setup`), then `agent-notify pair`')
+  } else {
+    $.ui.toast('Away: answer questions and approvals in Discord, or reply to an alert to prompt this session')
+  }
 }
 
 const serverKey = (name: string) => name.replace(/[^a-zA-Z0-9]/g, '_')
@@ -348,6 +439,11 @@ export const register: Register = on => {
       description: 'Toggle Discord / ntfy alerts for this session (agent-notify)',
       immediate: true,
     })
+    await $.command.register({
+      name: 'away',
+      description: 'Toggle away mode: answer and prompt this session from Discord (agent-notify)',
+      immediate: true,
+    })
     const started = await next(e)
     // An earlier version opened a session picker pane; close one left behind.
     await $.ui.close({ id: 'session-picker' }).catch(() => undefined)
@@ -363,6 +459,7 @@ export const register: Register = on => {
       if (ticks % PR_EVERY_TICKS === 0) void refreshPr($).catch(() => undefined)
     })
     void $.ui.open({ id: PANE, title: TITLE })
+    if (await isAway($)) watchInbox($, true)
 
     return started
   })
@@ -383,6 +480,12 @@ export const register: Register = on => {
 
   on('command.run', { command: 'notify' }, async $ => {
     await toggleNotify($)
+
+    return {}
+  })
+
+  on('command.run', { command: 'away' }, async $ => {
+    await toggleAway($)
 
     return {}
   })
@@ -426,19 +529,88 @@ export const register: Register = on => {
   on('classic.Notification', async ($, e, next) => {
     const result = await next(e)
     if (e.notification_type === 'permission_prompt' || e.notification_type === 'elicitation_dialog') {
-      if (await isNotifying($)) armWait($, e.message)
+      // Away, the approval itself went to Discord (classic.PermissionRequest).
+      if ((await isNotifying($)) && !(await isAway($))) armWait($, e.message)
     }
 
     return result
   }).catch(($, e, next) => (next.called ? undefined : next(e)))
 
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
-    if (e.agentId === undefined && (await isNotifying($))) {
+    if (e.agentId !== undefined || !(await isNotifying($))) return next(e)
+    if (!(await isAway($))) {
       armWait($, e.questions.map(q => q.question).join('\n'))
+      return next(e)
     }
 
-    return next(e)
-  }).catch(($, e, next) => next(e))
+    // Away: the dialog and Discord both ask; whichever answers first wins.
+    const token = (e.tool_use_id ?? `q${await $.clock.now()}`).replace(/[^A-Za-z0-9_-]/g, '')
+    const where = await whereOf($).catch(() => '')
+    const dialog = next(e)
+    const remote = Promise.all(
+      e.questions.map((q, i) =>
+        askRemote(
+          $,
+          {
+            kind: 'choice',
+            title: q.header ? `${q.header} · ${q.question}` : q.question,
+            options: q.options.map(o => o.label),
+            descriptions: q.options.map(o => o.description ?? ''),
+            multi: q.multiSelect,
+            meta: where,
+            token: `${token}-${i}`,
+          },
+          QUESTION_S,
+        ),
+      ),
+    ).then(list => (list.every(a => a !== null) ? (list as RemoteAnswer[]) : null))
+    const first = await Promise.race([
+      dialog.then(local => ({ local })),
+      remote.then(answers => ({ answers })),
+    ])
+    if ('local' in first) {
+      e.questions.forEach((_, i) => void agentNotify($, ['cancel', `${token}-${i}`]))
+      return first.local
+    }
+    if (first.answers === null) return dialog
+    const answers: Record<string, string> = {}
+    e.questions.forEach((q, i) => {
+      const a = first.answers?.[i]
+      answers[q.question] = a?.kind === 'choice' ? (a.values ?? []).join(', ') : (a?.value ?? '')
+    })
+
+    // Returned with the dialog still open: the engine closes it.
+    return { result: { questions: e.questions, answers } }
+  }).catch(($, e, next) => (next.called ? undefined : next(e)))
+
+  // Away: an approval goes to Discord first; no answer in APPROVE_S, and the
+  // terminal's own prompt shows.
+  on('classic.PermissionRequest', async ($, e, next) => {
+    const result = await next(e)
+    if (result.decision !== undefined || !(await isAway($))) return result
+    const [name, where] = await Promise.all([read($, title).catch(() => ''), whereOf($).catch(() => '')])
+    const detail = detailOf((e.tool_input ?? {}) as Record<string, unknown>)
+    $.ui.toast(`Approval sent to Discord: answer there, or here in ${APPROVE_S / 60} min`)
+    const answer = await askRemote(
+      $,
+      {
+        kind: 'approve',
+        title: name ? `Approve? · ${name}` : 'Approve?',
+        body: detail ? `${e.tool_name}: ${detail}` : e.tool_name,
+        meta: where,
+        token: `p${await $.clock.now()}`,
+      },
+      APPROVE_S,
+    )
+    if (answer === null) return result
+    return {
+      ...result,
+      decision:
+        answer.kind === 'allow'
+          ? { behavior: 'allow' as const }
+          : { behavior: 'deny' as const, message: answer.value || 'Denied from Discord.' },
+    }
+  }).catch(($, e, next) => (next.called ? undefined : next(e)))
 
   // A tool drawing progress is running, so its permission was given.
   on('ui.render', { component: 'ToolProgress' }, ($, e, next) => {
@@ -517,7 +689,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts] =
+    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts, isAwayOn] =
       await Promise.all([
         read($, info),
         read($, title),
@@ -530,6 +702,7 @@ export const register: Register = on => {
         read($, lastTurn),
         $.clock.now(),
         read($, notify),
+        read($, away),
       ])
     const width = Math.max(10, Math.min(28, (e.viewport?.columns ?? 32) - 4))
 
@@ -611,9 +784,14 @@ export const register: Register = on => {
             export
           </Button>
         </Box>
-        <Button key="notify" hotkey="n" onPress={() => void toggleNotify($)}>
-          {alerts ? '[x]' : '[ ]'} alerts <Text dimColor>Discord / ntfy</Text>
-        </Button>
+        <Box flexDirection="column">
+          <Button key="notify" hotkey="n" onPress={() => void toggleNotify($)}>
+            {alerts ? '[x]' : '[ ]'} alerts <Text dimColor>Discord / ntfy</Text>
+          </Button>
+          <Button key="away" hotkey="a" onPress={() => void toggleAway($)}>
+            {isAwayOn ? '[x]' : '[ ]'} away <Text dimColor>answer in Discord</Text>
+          </Button>
+        </Box>
 
         <Box flexDirection="column">
           <Text bold>Context</Text>

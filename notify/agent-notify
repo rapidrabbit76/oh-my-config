@@ -13,9 +13,14 @@ py="$(command -v python3)"
 boot='import sys; sys.path.insert(0, sys.argv.pop(1)); from agent_notify.cli import main; sys.exit(main())'
 
 case "${1:-}" in
-  hook | send | _run)
+  send | _run | cancel)
     # Called by an agent: whatever goes wrong here, it must not fail or print.
     [[ -n "$py" && -d "$root/agent_notify" ]] && "$py" -E -s -c "$boot" "$root" "$@" >/dev/null 2>&1
+    exit 0
+    ;;
+  hook | ask | inbox)
+    # The same, but stdout is the answer the caller reads (JSON, or nothing).
+    [[ -n "$py" && -d "$root/agent_notify" ]] && "$py" -E -s -c "$boot" "$root" "$@" 2>/dev/null
     exit 0
     ;;
 esac

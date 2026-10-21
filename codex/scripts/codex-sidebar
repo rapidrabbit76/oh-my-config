@@ -8,7 +8,8 @@
 #
 # Reads Codex's own state (state_*.sqlite and the session's rollout file) and git.
 # Sends nothing anywhere and adds no tokens. Needs jq and sqlite3. q closes it;
-# n turns Discord / ntfy alerts on or off for the thread (agent-notify, if installed).
+# n turns Discord / ntfy alerts on or off for the thread (agent-notify, if installed);
+# a turns away on or off: approvals from Discord, and replies typed into this pane.
 
 WIDTH=42
 # A pane tmux starts may not carry the login shell's PATH.
@@ -195,10 +196,12 @@ draw() {
     out+="${C_DIM}last turn ${lastturn}s${C_RESET}"$'\n'
   fi
   if command -v agent-notify &>/dev/null && [[ -n "$THREAD" ]]; then
-    if [[ -e "$ALERTS/$THREAD" ]]; then
-      out+="${C_GREEN}[x]${C_RESET} alerts ${C_DIM}Discord / ntfy (n)${C_RESET}"$'\n'
+    if grep -qs '"away"' "$ALERTS/$THREAD"; then
+      out+="${C_GREEN}[x]${C_RESET} alerts  ${C_GREEN}[x]${C_RESET} away ${C_DIM}(n / a)${C_RESET}"$'\n'
+    elif [[ -e "$ALERTS/$THREAD" ]]; then
+      out+="${C_GREEN}[x]${C_RESET} alerts  ${C_DIM}[ ] away (n / a)${C_RESET}"$'\n'
     else
-      out+="${C_DIM}[ ] alerts Discord / ntfy (n)${C_RESET}"$'\n'
+      out+="${C_DIM}[ ] alerts  [ ] away (n / a)${C_RESET}"$'\n'
     fi
   fi
   [[ -n "$ctx_line" ]] && out+=$'\n'"${C_BOLD}Context${C_RESET}"$'\n'"${ctx_line}"$'\n'
@@ -221,7 +224,7 @@ loop() {
     collect "$target"
     cols=$(tput cols 2>/dev/null || echo "$WIDTH")
     # Redraw on a change of the rollout, the folder or the width, and every 10s for git and the clock.
-    key="$ROLLOUT:$(mtime "$ROLLOUT"):$DIR:$cols:$(($(date +%s) / 10)):$([[ -e "$ALERTS/$THREAD" ]] && echo 1)"
+    key="$ROLLOUT:$(mtime "$ROLLOUT"):$DIR:$cols:$(($(date +%s) / 10)):$(cat "$ALERTS/$THREAD" 2>/dev/null || echo -)"
     if [[ "$key" != "$last_key" ]]; then
       frame=$(draw "$cols")
       printf '\e[H%s\e[J' "${frame//$'\n'/$'\e[K\n'}"
@@ -232,6 +235,16 @@ loop() {
     case "$k" in
       q) break ;;
       n) [[ -n "$THREAD" ]] && agent-notify switch codex "$THREAD" toggle &>/dev/null ;;
+      a)
+        # Away: a reply in Discord is typed into the Codex pane this sidebar watches.
+        if [[ -n "$THREAD" ]]; then
+          if grep -qs '"away"' "$ALERTS/$THREAD"; then
+            agent-notify switch codex "$THREAD" alerts &>/dev/null
+          else
+            agent-notify switch codex "$THREAD" away --pane "$target" &>/dev/null
+          fi
+        fi
+        ;;
     esac
   done
   [[ -n "$TMUX" ]] && tmux kill-pane -t "$TMUX_PANE"

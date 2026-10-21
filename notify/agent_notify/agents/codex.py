@@ -9,12 +9,13 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Dict, Mapping, Optional
 
-from agent_notify.agents import Agent, agent
+from agent_notify.agents import Agent, HookReply, agent
 from agent_notify.alert import Alert
 from agent_notify.notifier import Notifier
 from agent_notify.switches import Switches
@@ -23,6 +24,9 @@ from agent_notify.util import meta, took, where
 CODEX_HOME = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 # An approval left this long counts as waiting for you.
 WAIT_S = float(os.environ.get("AGENT_NOTIFY_WAIT_SECONDS") or 30)
+# Away: how long an approval waits for Discord before Codex asks in the terminal.
+# Keep it under the PermissionRequest hook's timeout in config.toml (900s).
+APPROVE_S = float(os.environ.get("AGENT_NOTIFY_APPROVE_SECONDS") or 600)
 TAIL_BYTES = 2_000_000
 
 
@@ -86,11 +90,35 @@ class Codex(Agent):
         )
         return row[0] if row else None
 
+    def locate(self, folder: str) -> Dict[str, str]:
+        """The tmux pane running Codex in ``folder``, where a reply gets typed."""
+        try:
+            ran = subprocess.run(
+                ["tmux", "list-panes", "-a", "-F", "#{pane_id}\t#{pane_current_command}\t#{pane_current_path}"],
+                capture_output=True, text=True, timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return {}
+        want = os.path.realpath(folder)
+        for line in ran.stdout.splitlines():
+            pane, command, path = (line.split("\t") + ["", ""])[:3]
+            if command.startswith("codex") and os.path.realpath(path) == want:
+                return {"pane": pane}
+        return {}
+
     def title_of(self, thread: str) -> str:
         row = _query(
             "SELECT coalesce(nullif(name, ''), nullif(title, ''), '') FROM threads WHERE id = ?", thread
         )
         return (row[0] if row else "").replace("\n", " ")
+
+    def approval_body(self, event: Mapping) -> str:
+        tool = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
+        detail = tool.get("description") or tool.get("command") or tool.get("cmd") or ""
+        if isinstance(detail, list):
+            detail = " ".join(map(str, detail))
+        name = str(event.get("tool_name") or "a tool")
+        return f"{name}: {detail}" if detail else name
 
     def on_hook(self, event: Mapping, notifier: Notifier) -> None:
         name = event.get("hook_event_name")
@@ -107,6 +135,7 @@ class Codex(Agent):
                 f"Done · {title}" if title else "Done",
                 str(event.get("last_assistant_message") or ""),
                 meta(where(folder), took(seconds) if seconds is not None else ""),
+                thread,
             )
             notifier.deliver(self, alert)
 
@@ -116,16 +145,65 @@ class Codex(Agent):
             # An answer, or the turn going on, writes to the rollout.
             if _stamp(rollout) != before or not Switches(self.key).is_on(thread):
                 return
-            tool = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
-            detail = tool.get("description") or tool.get("command") or tool.get("cmd") or ""
-            if isinstance(detail, list):
-                detail = " ".join(map(str, detail))
-            body = f"{event.get('tool_name') or 'a tool'}: {detail}" if detail else str(event.get("tool_name") or "")
             alert = Alert(
                 self.key,
                 "wait",
                 f"Waiting for approval · {title}" if title else "Waiting for approval",
-                body,
+                self.approval_body(event),
                 where(folder),
+                thread,
             )
             notifier.deliver(self, alert)
+
+    def on_hook_sync(self, event: Mapping, notifier: Notifier, mode: str) -> HookReply:
+        """Away: an approval goes to Discord first, and its answer is the decision.
+        No answer in APPROVE_S: no output, so Codex shows its own prompt."""
+        if mode != "away" or event.get("hook_event_name") != "PermissionRequest":
+            return HookReply()
+        from agent_notify import bridge
+        from agent_notify.channels import listening
+        from agent_notify.interactive import Question
+
+        # Nothing can hear back (no bot, not paired): the plain alert, as in alerts mode.
+        if listening(notifier.config) is None:
+            return HookReply()
+        thread = self.session_of(event) or ""
+        title = self.title_of(thread)
+        question = Question(
+            self.key,
+            thread,
+            "approve",
+            f"Approve? · {title}" if title else "Approve?",
+            self.approval_body(event),
+            meta=where(str(event.get("cwd") or "")),
+        )
+        answer = bridge.ask(question, APPROVE_S)
+        if answer is None:
+            return HookReply(handled=True)
+        decision = {"behavior": "allow"} if answer.kind == "allow" else {
+            "behavior": "deny",
+            "message": answer.value or "Denied from Discord.",
+        }
+        return HookReply({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}, True)
+
+    def deliver_text(self, session: str, text: str, info: Mapping) -> bool:
+        """Types the message into the thread's Codex pane, as a paste then Enter."""
+        pane = str(info.get("pane") or "")
+        if not pane.startswith("%") or not _pane_alive(pane):
+            return False
+        try:
+            subprocess.run(["tmux", "load-buffer", "-b", "agent-notify", "-"], input=text, text=True, timeout=5, check=True)
+            subprocess.run(["tmux", "paste-buffer", "-p", "-d", "-b", "agent-notify", "-t", pane], timeout=5, check=True)
+            subprocess.run(["tmux", "send-keys", "-t", pane, "Enter"], timeout=5, check=True)
+            return True
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+
+def _pane_alive(pane: str) -> bool:
+    """tmux display answers a missing pane with nothing, not an error: ask list-panes."""
+    try:
+        ran = subprocess.run(["tmux", "list-panes", "-a", "-F", "#{pane_id}"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return pane in ran.stdout.split()

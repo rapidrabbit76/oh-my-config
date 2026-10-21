@@ -35,6 +35,7 @@ class Alert:
     title: str
     body: str = ""
     meta: str = ""  # one line under the body: folder, branch, how long
+    session: str = ""  # the agent's session: a reply to the alert goes back to it
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "kind", self.kind if self.kind in KINDS else "info")

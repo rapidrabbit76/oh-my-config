@@ -6,7 +6,11 @@ implements ``session_of`` and ``on_hook``: ``agent-notify hook <key>`` reads
 the hook's JSON, drops it unless that session's switch is on, and hands it
 to ``on_hook`` in a detached process, so the CLI never waits on a channel.
 One that can name its newest session in a folder implements ``session_in``,
-which ``agent-notify <key> on|off|status [dir]`` uses.
+which ``agent-notify <key> on|off|away|status [dir]`` uses.
+
+Two-way (a session switched to ``away``): ``on_hook_sync`` may answer a hook
+itself, waiting for an answer from Discord (an approval, say), and
+``deliver_text`` hands a message from Discord to the session as a prompt.
 
 The config may override a profile: ``<KEY>_NAME`` and ``<KEY>_AVATAR``
 (``CODEX_NAME=Codex @ work``).
@@ -14,11 +18,21 @@ The config may override a profile: ``<KEY>_NAME`` and ``<KEY>_AVATAR``
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import ClassVar, Dict, List, Mapping, Optional, Type
 
 from agent_notify.channels import Profile
 from agent_notify.config import Config
 from agent_notify.notifier import Notifier
+
+
+@dataclass(frozen=True)
+class HookReply:
+    """What ``on_hook_sync`` did: ``output`` is printed for the CLI to read;
+    ``handled`` keeps the event from also going to ``on_hook``."""
+
+    output: Optional[Dict] = None
+    handled: bool = False
 
 
 class Agent:
@@ -44,8 +58,24 @@ class Agent:
         """The newest session in a folder, where the agent can tell."""
         return None
 
+    def locate(self, folder: str) -> Dict[str, str]:
+        """What away mode keeps with a session started from ``folder`` (Codex: its tmux pane)."""
+        return {}
+
     def on_hook(self, event: Mapping, notifier: Notifier) -> None:
         """Acts on one hook event of a session with alerts on. Runs detached."""
+
+    def on_hook_sync(self, event: Mapping, notifier: Notifier, mode: str) -> HookReply:
+        """Runs in the hook itself, before ``on_hook``; the CLI waits for it."""
+        return HookReply()
+
+    def deliver_text(self, session: str, text: str, info: Mapping) -> bool:
+        """Hands a message from Discord to an away session. By default it waits
+        in the session's inbox (``agent-notify inbox``) for the agent to read."""
+        from agent_notify import interactive
+
+        interactive.to_inbox(self.key, session, text)
+        return True
 
 
 class GenericAgent(Agent):

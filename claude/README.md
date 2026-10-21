@@ -56,6 +56,7 @@ last turn 48s · 7 tools
 
 [compact] [rename] [export]                   click, or c / r / e while focused
 [ ] alerts Discord / ntfy                     n, or /notify: alerts for this session
+[ ] away answer in Discord                    a, or /away: answer and prompt from Discord
 
 Context
 ████████░░░░░░  52%
@@ -80,6 +81,8 @@ Recent                                        last 5 tool calls
 ## Alerts
 
 `[ ] alerts` in the sidebar, or `/notify`, turns on Discord / ntfy alerts for this session: one when a turn ends (not an interrupted one, nor a subagent's), and one when a permission prompt or a question has waited 30 seconds for you. Channels are set with `agent-notify setup`; see [notify](../notify/README.md). A channel that is down never slows or breaks the session.
+
+`[ ] away`, or `/away`, goes further: questions and approvals also go to Discord to answer there (react, or reply), and a reply to an alert becomes a prompt in this session. It needs a Discord bot; see [Answering from Discord](../notify/README.md#answering-from-discord-away).
 
 ## Refresh
 
