@@ -1,0 +1,15 @@
+# >>> oh-my-config codex keymap >>>
+# opencode-style ctrl-x leader keys, added by oh-my-config/codex/install.sh.
+# Yours to edit: the updater never rewrites this block. Codex's defaults
+# (ctrl-t, ctrl-g, f3) are listed again so they keep working.
+[tui.keymap.global]
+leader = "ctrl-x"
+open_agents = "leader l"
+open_external_editor = ["ctrl-g", "leader e"]
+open_transcript = ["ctrl-t", "leader o"]
+find_transcript = ["f3", "leader f"]
+toggle_vim_mode = "leader v"
+
+[tui.keymap.chat]
+next_permission_mode = "leader a"
+# <<< oh-my-config codex keymap <<<

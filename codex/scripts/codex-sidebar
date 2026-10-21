@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+# codex-sidebar — opencode-style session sidebar for the Codex CLI, in a tmux pane.
+#
+#   codex-sidebar toggle <pane_id>   Open/close the sidebar beside a pane (tmux: Prefix + C)
+#   codex-sidebar render <pane_id>   Sidebar loop for the Codex session in that pane
+#   codex-sidebar [dir]              Sidebar loop for the latest session in dir (default: .)
+#   codex-sidebar --once [dir]       Print the sidebar once and exit
+#
+# Reads Codex's own state (state_*.sqlite and the session's rollout file) and git.
+# Sends nothing anywhere and adds no tokens. Needs jq and sqlite3. q closes it.
+
+WIDTH=42
+# A pane tmux starts may not carry the login shell's PATH.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+
+C_RESET=$'\e[0m'; C_BOLD=$'\e[1m'; C_DIM=$'\e[2m'
+C_RED=$'\e[31m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'
+C_BLUE=$'\e[34m'; C_MAGENTA=$'\e[35m'; C_CYAN=$'\e[36m'
+
+mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+duration() {
+  local s=$1 m h d
+  ((s < 0)) && s=0
+  m=$(((s + 30) / 60))
+  if ((m < 60)); then echo "${m}m"
+  elif ((m < 1440)); then h=$((m / 60)); m=$((m % 60)); ((m)) && echo "${h}h${m}m" || echo "${h}h"
+  else d=$((m / 1440)); h=$(((m % 1440) / 60)); ((h)) && echo "${d}d${h}h" || echo "${d}d"
+  fi
+}
+
+kilo() { (($1 >= 1000)) && echo "$((($1 + 500) / 1000))k" || echo "$1"; }
+
+state_db() { /bin/ls -t "$CODEX_HOME"/state_*.sqlite 2>/dev/null | head -1; }
+
+# The newest top-level thread in a directory: id, rollout path, title, model,
+# effort and creation time, tab separated. CLI threads first when Codex runs
+# in the pane, so a Desktop thread in the same folder does not win.
+find_thread() {
+  local dir=$1 prefer_cli=$2 db q
+  db=$(state_db)
+  [[ -n "$db" ]] || return 1
+  q=${dir//\'/\'\'}
+  sqlite3 -readonly -separator $'\t' "$db" "
+    SELECT id, rollout_path,
+           replace(coalesce(nullif(name, ''), nullif(title, ''), substr(first_user_message, 1, 80), ''), char(10), ' '),
+           coalesce(model, ''), coalesce(reasoning_effort, ''), created_at
+    FROM threads
+    WHERE cwd = '$q' AND archived = 0 AND source NOT LIKE '{%'
+    ORDER BY ${prefer_cli:+(source = 'cli') DESC,} updated_at_ms DESC
+    LIMIT 1;" 2>/dev/null
+}
+
+# One tagged, tab-separated line per thing to draw, from the rollout file.
+ROLLOUT_JQ='
+def lastof(f): [.[] | select(f)] | last;
+def clip: tostring | gsub("[\t\n\r]+"; " ") | .[0:120];
+def detail:
+  if .type == "custom_tool_call" then
+    (.input // "" | tostring) as $in
+    | (($in | capture("\\*\\*\\* (?:Update|Add|Delete) File: (?<f>[^\n]+)").f) // ($in | split("\n") | map(select(test("\\S"))) | first) // "")
+  else
+    ((.arguments // "{}") | (try fromjson catch {})) as $a
+    | ($a.cmd // $a.command // $a.path // $a.query // $a.pattern // $a.url // "")
+    | if type == "array" then join(" ") else . end
+  end | clip;
+
+[inputs | (fromjson? // empty)] as $all
+| ($all | lastof(.type == "event_msg" and .payload.type == "token_count") | .payload) as $tok
+| ($all | lastof(.type == "event_msg" and .payload.type == "task_complete") | .payload) as $done
+| ($all | lastof(.type == "event_msg" and .payload.type == "task_started") | .payload) as $start
+| ($all | lastof(.type == "turn_context") | .payload) as $ctx
+| ($all | lastof(.type == "response_item" and .payload.name == "update_plan") | .payload.arguments // null
+   | if . == null then null else (try fromjson catch null) end) as $plan
+| ([$all[] | select(.type == "response_item" and (.payload.type == "function_call_output" or .payload.type == "custom_tool_call_output")) | .payload.call_id]) as $answered
+| ([$all[] | select(.type == "response_item" and (.payload.type == "function_call" or .payload.type == "custom_tool_call")) | .payload] | .[-5:]) as $calls
+| (if $ctx then ["model", ($ctx.model // ""), ($ctx.effort // "")] else empty end),
+  ["turns", ([$all[] | select(.type == "event_msg" and .payload.type == "task_complete")] | length)],
+  ["state", (if $start and ((($done.turn_id // "") != ($start.turn_id // "")) or $done == null) then "working" else "idle" end)],
+  (if $done then ["lastturn", (($done.duration_ms // 0) / 1000 | floor)] else empty end),
+  (if $tok.info then ["ctx", ($tok.info.last_token_usage.total_tokens // 0), ($tok.info.model_context_window // 0), ($tok.info.total_token_usage.total_tokens // 0)] else empty end),
+  ($tok.rate_limits // {} | (.primary, .secondary) | select(. != null) | ["limit", (.window_minutes // 0), (.used_percent // 0), (.resets_at // 0)]),
+  ($plan.plan // [] | .[] | ["plan", (.status // "pending"), (.step // "" | clip)]),
+  ($calls[] | ["call", (if (.call_id // "") as $id | $answered | index($id) then "ok" else "run" end), (.name // "?"), detail])
+| map(tostring) | join("\t")
+'
+
+collect() {
+  local target=$1 dir prefer="" row id rollout
+  if [[ -n "$target" && -n "$TMUX" ]]; then
+    dir=$(tmux display -p -t "$target" '#{pane_current_path}' 2>/dev/null) || return 1
+    [[ "$(tmux display -p -t "$target" '#{pane_current_command}' 2>/dev/null)" == codex* ]] && prefer=1
+  else
+    dir=$(cd "${target:-.}" 2>/dev/null && pwd -P) || return 1
+  fi
+  DIR=$dir
+  row=$(find_thread "$dir" "$prefer")
+  IFS=$'\t' read -r id rollout TITLE T_MODEL T_EFFORT T_CREATED <<<"$row"
+  ROLLOUT=""
+  if [[ -n "$id" ]]; then
+    [[ -f "$rollout" ]] || rollout=$(find "$CODEX_HOME/sessions" -name "*$id.jsonl" 2>/dev/null | head -1)
+    [[ -f "$rollout" ]] && ROLLOUT=$rollout
+  fi
+}
+
+git_lines() {
+  local dir=$1 status dirs branch="" ahead=0 behind=0 dirty="" top gitdir common
+  status=$(git -C "$dir" --no-optional-locks status --porcelain=v2 --branch 2>/dev/null) || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      "# branch.head "*) branch=${line#\# branch.head } ;;
+      "# branch.ab "*) set -- ${line#\# branch.ab }; ahead=${1#+}; behind=${2#-} ;;
+      "#"*|"") ;;
+      *) dirty="*" ;;
+    esac
+  done <<<"$status"
+  [[ "$branch" == "(detached)" ]] && branch="detached HEAD"
+  local ab=""
+  ((ahead > 0)) && ab+=" ↑$ahead"
+  ((behind > 0)) && ab+=" ↓$behind"
+  echo "${C_CYAN} ${branch}${C_YELLOW}${dirty}${C_RESET}${C_DIM}${ab}${C_RESET}"
+  { read -r top; read -r gitdir; read -r common; } < <(git -C "$dir" rev-parse --path-format=absolute --show-toplevel --git-dir --git-common-dir 2>/dev/null)
+  if [[ -n "$gitdir" && "$gitdir" != "$common" ]]; then
+    echo "${C_DIM}⎇ worktree ${top##*/}${C_RESET}"
+  else
+    echo "${C_DIM}⎇ main worktree${C_RESET}"
+  fi
+}
+
+draw() {
+  local cols=$1 now bar_w out="" tag a b c d model="$T_MODEL" effort="$T_EFFORT" turns=0 state="" lastturn=""
+  local ctx_line="" limits="" plan="" calls=""
+  now=$(date +%s)
+  bar_w=$((cols - 7)); ((bar_w > 24)) && bar_w=24; ((bar_w < 8)) && bar_w=8
+
+  if [[ -n "$ROLLOUT" ]]; then
+    while IFS=$'\t' read -r tag a b c d; do
+      case "$tag" in
+        model) [[ -n "$a" ]] && model=$a; [[ -n "$b" ]] && effort=$b ;;
+        turns) turns=$a ;;
+        state) state=$a ;;
+        lastturn) lastturn=$a ;;
+        ctx)
+          local pct=0 filled color
+          ((b > 0)) && pct=$((a * 100 / b))
+          filled=$((pct * bar_w / 100)); ((filled > bar_w)) && filled=$bar_w
+          color=$C_GREEN; ((pct >= 60)) && color=$C_YELLOW; ((pct >= 80)) && color=$C_RED
+          ctx_line="${color}$(printf '█%.0s' $(seq 1 $filled) 2>/dev/null)${C_RESET}${C_DIM}$(printf '░%.0s' $(seq 1 $((bar_w - filled))) 2>/dev/null)${C_RESET} ${pct}%"
+          ctx_line+=$'\n'"${C_DIM}$(kilo "$a") / $(kilo "$b") tokens · $(kilo "$c") total${C_RESET}"
+          ((pct >= 80)) && ctx_line+=$'\n'"${C_YELLOW}⚠ consider /compact${C_RESET}"
+          ;;
+        limit)
+          local label pctu=${b%.*} reset=""
+          case "$a" in 300) label="5h" ;; 10080) label="7d" ;; *) label="$(duration $((a * 60)))" ;; esac
+          ((c > now)) && reset="  ↻ $(duration $((c - now)))"
+          if ((pctu >= 80)); then limits+="${C_YELLOW}"; else limits+="${C_DIM}"; fi
+          limits+="$(printf '%-3s %3s%% used' "$label" "$pctu")${reset}${C_RESET}"$'\n'
+          ;;
+        plan)
+          case "$a" in
+            completed) plan+="${C_DIM}✓ $b${C_RESET}"$'\n' ;;
+            in_progress) plan+="${C_MAGENTA}▸ $b${C_RESET}"$'\n' ;;
+            *) plan+="○ $b"$'\n' ;;
+          esac
+          ;;
+        call)
+          if [[ "$a" == "ok" ]]; then calls+="${C_GREEN}✓${C_RESET} "; else calls+="${C_MAGENTA}▸${C_RESET} "; fi
+          calls+="$b ${C_DIM}$c${C_RESET}"$'\n'
+          ;;
+      esac
+    done < <(jq -n -R -r "$ROLLOUT_JQ" "$ROLLOUT" 2>/dev/null)
+  fi
+
+  out+="${C_BOLD}${TITLE:-${DIR##*/}}${C_RESET}"$'\n'
+  [[ -n "$TITLE" ]] && out+="${C_DIM}${DIR##*/}${C_RESET}"$'\n'
+  local git_info
+  git_info=$(git_lines "$DIR")
+  [[ -n "$git_info" ]] && out+="${git_info}"$'\n'
+  if [[ -z "$T_CREATED" ]]; then
+    out+=$'\n'"${C_DIM}No Codex session in this folder yet.${C_RESET}"$'\n'
+    printf '%s' "$out"
+    return
+  fi
+  local meta="${model}${effort:+ · $effort} · ${turns} turns · $(duration $((now - T_CREATED)))"
+  out+="${C_DIM}${meta}${C_RESET}"$'\n'
+  if [[ "$state" == "working" ]]; then
+    out+="${C_MAGENTA}● working${C_RESET}"$'\n'
+  elif [[ -n "$lastturn" ]]; then
+    out+="${C_DIM}last turn ${lastturn}s${C_RESET}"$'\n'
+  fi
+  [[ -n "$ctx_line" ]] && out+=$'\n'"${C_BOLD}Context${C_RESET}"$'\n'"${ctx_line}"$'\n'
+  [[ -n "$limits" ]] && out+=$'\n'"${C_BOLD}Limits${C_RESET}"$'\n'"${limits}"
+  [[ -n "$plan" ]] && out+=$'\n'"${C_BOLD}Plan${C_RESET}"$'\n'"${plan}"
+  [[ -n "$calls" ]] && out+=$'\n'"${C_BOLD}Recent${C_RESET}"$'\n'"${calls}"
+  printf '%s' "$out"
+}
+
+loop() {
+  local target=$1 key last_key="" frame cols
+  printf '\e[?25l\e[?7l\e[2J'
+  trap 'printf "\e[?7h\e[?25h"' EXIT
+  while :; do
+    # The watched pane closed: close with it.
+    # (tmux display answers a missing pane with nothing, not an error.)
+    if [[ -n "$TMUX" && -n "$target" ]] && ! tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qx "$target"; then
+      exit 0
+    fi
+    collect "$target"
+    cols=$(tput cols 2>/dev/null || echo "$WIDTH")
+    # Redraw on a change of the rollout, the folder or the width, and every 10s for git and the clock.
+    key="$ROLLOUT:$(mtime "$ROLLOUT"):$DIR:$cols:$(($(date +%s) / 10))"
+    if [[ "$key" != "$last_key" ]]; then
+      frame=$(draw "$cols")
+      printf '\e[H%s\e[J' "${frame//$'\n'/$'\e[K\n'}"
+      last_key=$key
+    fi
+    read -rsn1 -t 2 k && [[ "$k" == q ]] && break
+  done
+  [[ -n "$TMUX" ]] && tmux kill-pane -t "$TMUX_PANE"
+}
+
+sidebar_of() {
+  tmux list-panes -t "$1" -F '#{pane_id} #{@codex_sidebar}' 2>/dev/null | awk '$2 == "1" { print $1; exit }'
+}
+
+toggle() {
+  local target=$1 pane
+  pane=$(sidebar_of "$target")
+  if [[ -n "$pane" ]]; then
+    tmux kill-pane -t "$pane"
+  else
+    pane=$(tmux split-window -t "$target" -h -l "$WIDTH" -d -P -F '#{pane_id}' "'$SELF' render '$target'") || return
+    tmux set -p -t "$pane" @codex_sidebar 1
+  fi
+}
+
+need() {
+  local missing=""
+  for c in jq sqlite3; do command -v "$c" &>/dev/null || missing+=" $c"; done
+  [[ -z "$missing" ]] || { echo "codex-sidebar: missing$missing" >&2; exit 1; }
+}
+
+need
+case "${1:-}" in
+  toggle) toggle "${2:?pane id}" ;;
+  render) loop "${2:?pane id}" ;;
+  --once) TMUX="" collect "${2:-.}" && draw "$(tput cols 2>/dev/null || echo "$WIDTH")" ;;
+  -h | --help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) TMUX="" loop "${1:-.}" ;;
+esac

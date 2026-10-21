@@ -141,6 +141,7 @@ These are shipped in the default `~/.tmux.conf.local` template so they survive r
 | `Prefix + Tab` | Yazi file explorer (50% split) |
 | `Prefix + f` | Search tabs in every session with fzf (falls back to `choose-tree`) |
 | `Prefix + b` | Toggle side tab list |
+| `Prefix + C` | Toggle the Codex session sidebar (needs the [codex component](../codex/README.md)) |
 | `Prefix + r` | Reload config |
 
 ### Pomodoro Timer

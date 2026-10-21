@@ -4,7 +4,7 @@
 #   update.sh                     Update now (fetch + sync every installed component)
 #   update.sh --auto              Shell startup hook: asks "Update now? [Y/n]" when a check found
 #                                 a new version (checks run once a day in the background)
-#   update.sh --register <name>   Called by installers (tmux | yazi | nvim | claude)
+#   update.sh --register <name>   Called by installers (tmux | yazi | nvim | claude | codex)
 #
 # Only config files are synced. Packages, ~/.zshrc and *.local files are never touched.
 # Local edits are kept; if upstream changed the same file, the local copy is saved as
@@ -87,6 +87,13 @@ KEYBINDINGS_MERGE='.[1].bindings as $ours | .[0] | .bindings = (reduce $ours[] a
     else . end)
   else . + [$b] end))'
 
+# The keymap block in ~/.codex/config.toml is added once by codex/install.sh and
+# then left to the user; only the sidebar script is synced.
+sync_codex() {
+  sync_file codex/scripts/codex-sidebar "$HOME/.local/bin/codex-sidebar"
+  chmod +x "$HOME/.local/bin/codex-sidebar" 2>/dev/null
+}
+
 sync_claude() {
   local src="$OMC_HOME/claude/keybindings.json"
   local dest="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/keybindings.json" merged
@@ -115,7 +122,7 @@ install_hook() {
 }
 
 register() {
-  case "$1" in tmux | yazi | nvim | claude) ;; *) echo "unknown component: $1" >&2; return 1 ;; esac
+  case "$1" in tmux | yazi | nvim | claude | codex) ;; *) echo "unknown component: $1" >&2; return 1 ;; esac
   ensure_clone || return 1
   mkdir -p "$(dirname "$COMPONENTS_FILE")"
   grep -qx "$1" "$COMPONENTS_FILE" 2>/dev/null || echo "$1" >>"$COMPONENTS_FILE"
@@ -148,7 +155,7 @@ sync_all() {
   new_rev=$(git -C "$OMC_HOME" rev-parse HEAD)
 
   while read -r comp; do
-    case "$comp" in tmux | yazi | nvim | claude) "sync_$comp" ;; esac
+    case "$comp" in tmux | yazi | nvim | claude | codex) "sync_$comp" ;; esac
   done <"$COMPONENTS_FILE"
 
   if (( ${#CHANGED[@]} )); then
