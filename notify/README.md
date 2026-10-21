@@ -58,7 +58,7 @@ Nothing in the agent waits on it or breaks:
 
 ## Codex hooks
 
-`codex/install.sh` adds `agent-notify hook codex` to `~/.codex/hooks.json` for `Stop` and `PermissionRequest`. Codex runs a new hook only once you trust it: open `/hooks` in Codex and trust the two. The hook does nothing for a thread whose alerts are off. A permission request is sent if the thread's rollout file has not moved for 30 seconds (an answer writes to it).
+`codex/install.sh` adds `agent-notify hook codex` for `Stop` and `PermissionRequest` to `~/.codex/config.toml`, in its own marked block (not `~/.codex/hooks.json`: Codex skips that whole file when it holds a field it does not know, which some tools leave there). Codex runs a new hook only once you trust it: open `/hooks` in Codex and trust the two `agent-notify hook codex` entries. The hook does nothing for a thread whose alerts are off. A permission request is sent if the thread's rollout file has not moved for 30 seconds (an answer writes to it).
 
 ```
 agent-notify codex on|off|status [dir]          the newest Codex thread in dir

@@ -9,6 +9,8 @@ NOTIFY="$HOME/.local/bin/agent-notify"
 HOOKS="$CODEX_DIR/hooks.json"
 MARK_BEGIN="# >>> oh-my-config codex keymap >>>"
 MARK_END="# <<< oh-my-config codex keymap <<<"
+ALERTS_BEGIN="# >>> oh-my-config codex alerts >>>"
+ALERTS_END="# <<< oh-my-config codex alerts <<<"
 OMC_HOME="${OMC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/oh-my-config}"
 REMOTE_MODE=false
 CLEANUP_DIR=""
@@ -41,10 +43,10 @@ ok()    { echo -e "${GREEN}  ✓${NC} $1"; }
 warn()  { echo -e "${YELLOW}  ⚠${NC} $1"; }
 error() { echo -e "${RED}  ✗${NC} $1"; }
 
-# Drops the managed keymap block (markers included) from config.toml, with the
-# one blank line the installer put before it.
+# remove_block <begin> <end>: drops a managed block (markers included) from
+# config.toml, with the one blank line the installer put before it.
 remove_block() {
-  awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+  awk -v b="$1" -v e="$2" '
     $0 == b { skip = 1; held = ""; next }
     $0 == e { skip = 0; next }
     skip { next }
@@ -53,13 +55,33 @@ remove_block() {
     END { if (held) printf "\n" }' "$CONFIG"
 }
 
-# agent-notify's entries in ~/.codex/hooks.json: added once per event, removed
-# by --uninstall; every other hook there is left as it is.
-HOOK_EVENTS='["Stop", "PermissionRequest"]'
+# The alert hooks live in config.toml, in a block of their own: another tool
+# rewriting or breaking ~/.codex/hooks.json cannot take them down with it.
 hook_cmd() { printf '"%s" hook codex' "$NOTIFY"; }
-HOOKS_ADD='($events | fromjson) as $ev | .hooks //= {}
-  | reduce $ev[] as $e (.; if any(.hooks[$e][]?.hooks[]?; .command == $cmd) then .
-      else .hooks[$e] = ((.hooks[$e] // []) + [{hooks: [{type: "command", command: $cmd, timeout: 10}]}]) end)'
+alerts_block() {
+  local cmd
+  cmd=$(hook_cmd | sed 's/\\/\\\\/g; s/"/\\"/g')
+  cat <<TOML
+$ALERTS_BEGIN
+# agent-notify alerts (oh-my-config/notify), added by oh-my-config/codex/install.sh.
+# Trust both once in Codex with /hooks. They do nothing for a thread whose alerts are off.
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = "$cmd"
+timeout = 10
+
+[[hooks.PermissionRequest]]
+[[hooks.PermissionRequest.hooks]]
+type = "command"
+command = "$cmd"
+timeout = 10
+$ALERTS_END
+TOML
+}
+
+# Earlier installs put the alert hooks in ~/.codex/hooks.json: this drops them
+# there, and every other hook in the file is left as it is.
 HOOKS_REMOVE='.hooks |= (with_entries(.value |= map(.hooks |= map(select(.command != $cmd)) | select(.hooks | length > 0)))
   | with_entries(select(.value | length > 0)))'
 
@@ -100,8 +122,14 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   if [[ -f "$CONFIG" ]] && grep -qxF "$MARK_BEGIN" "$CONFIG"; then
     cp -p "$CONFIG" "$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
     tmp="$(mktemp)"
-    remove_block >"$tmp" && cat "$tmp" >"$CONFIG" && rm -f "$tmp"
+    remove_block "$MARK_BEGIN" "$MARK_END" >"$tmp" && cat "$tmp" >"$CONFIG" && rm -f "$tmp"
     ok "Removed the keymap block from ${DIM}${CONFIG/#$HOME/~}${NC} (backup kept)"
+  fi
+  if [[ -f "$CONFIG" ]] && grep -qxF "$ALERTS_BEGIN" "$CONFIG"; then
+    cp -p "$CONFIG" "$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+    tmp="$(mktemp)"
+    remove_block "$ALERTS_BEGIN" "$ALERTS_END" >"$tmp" && cat "$tmp" >"$CONFIG" && rm -f "$tmp"
+    ok "Removed the alert hooks from ${DIM}${CONFIG/#$HOME/~}${NC} (backup kept)"
   fi
   [[ -f "$SIDEBAR" ]] && rm -f "$SIDEBAR" && ok "Removed ${SIDEBAR/#$HOME/~}"
   if [[ -f "$HOOKS" ]] && grep -qF "agent-notify" "$HOOKS" && command -v jq &>/dev/null; then
@@ -218,19 +246,37 @@ if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' &>/dev/null; t
   warn "Alerts need Python 3.9 or newer (python3) — until then they stay off, harmlessly"
 fi
 
-[[ -s "$HOOKS" ]] || echo '{"hooks": {}}' >"$HOOKS"
-tmp="$(mktemp)"
-if ! jq --arg cmd "$(hook_cmd)" --arg events "$HOOK_EVENTS" "$HOOKS_ADD" "$HOOKS" >"$tmp" 2>/dev/null; then
-  warn "${HOOKS/#$HOME/~} is not valid JSON — left it alone, alerts stay off"
-elif cmp -s <(jq -S . "$tmp") <(jq -S . "$HOOKS"); then
-  ok "Alert hooks already in ${DIM}${HOOKS/#$HOME/~}${NC}"
+if grep -qxF "$ALERTS_BEGIN" "$CONFIG"; then
+  ok "Alert hooks already in ${DIM}${CONFIG/#$HOME/~}${NC}"
 else
-  cp -p "$HOOKS" "$HOOKS.bak.$(date +%Y%m%d%H%M%S)"
-  cat "$tmp" >"$HOOKS"
-  ok "Added Stop / PermissionRequest hooks to ${DIM}${HOOKS/#$HOME/~}${NC} (backup kept)"
-  warn "Codex runs a new hook only once you trust it: in Codex, ${CYAN}/hooks${NC} → trust the two agent-notify hooks"
+  backup="$CONFIG.bak.$(date +%Y%m%d%H%M%S)"
+  cp -p "$CONFIG" "$backup"
+  { [[ -s "$CONFIG" ]] && echo ""; alerts_block; } >>"$CONFIG"
+  if config_loads; then
+    ok "Added Stop / PermissionRequest hooks to ${DIM}${CONFIG/#$HOME/~}${NC} (backup kept)"
+    warn "Codex runs a new hook only once you trust it: in Codex, ${CYAN}/hooks${NC} → trust the two agent-notify hooks"
+  else
+    cp -p "$backup" "$CONFIG"
+    warn "Codex rejected the hook block (codex doctor) — restored your config, alerts stay off"
+  fi
 fi
-rm -f "$tmp"
+
+if [[ -f "$HOOKS" ]] && command -v jq &>/dev/null; then
+  if grep -qF "agent-notify" "$HOOKS"; then
+    tmp="$(mktemp)"
+    if jq --arg cmd "$(hook_cmd)" "$HOOKS_REMOVE" "$HOOKS" >"$tmp" 2>/dev/null; then
+      cp -p "$HOOKS" "$HOOKS.bak.$(date +%Y%m%d%H%M%S)"
+      cat "$tmp" >"$HOOKS"
+      ok "Moved the alert hooks out of ${DIM}${HOOKS/#$HOME/~}${NC} (backup kept)"
+    fi
+    rm -f "$tmp"
+  fi
+  # Codex refuses a hooks.json with any other top-level field, and then runs none of its hooks.
+  extra=$(jq -r '(keys - ["description", "hooks"]) | join(", ")' "$HOOKS" 2>/dev/null)
+  if [[ -n "$extra" ]]; then
+    warn "Codex ignores ${HOOKS/#$HOME/~} entirely: unknown top-level field(s) ${extra} (another tool's hooks there do not run)"
+  fi
+fi
 if "$NOTIFY" status &>/dev/null; then
   ok "Channels set ${DIM}(agent-notify status)${NC}"
 else

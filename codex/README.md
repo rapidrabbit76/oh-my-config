@@ -16,7 +16,7 @@ The installer:
 
 1. Appends [`keymap.toml`](keymap.toml) to `~/.codex/config.toml` between `# >>> oh-my-config codex keymap >>>` markers, checks with `codex doctor` that Codex still loads the config, and restores the backup if not. If your config already has `[tui.keymap.global]` or `[tui.keymap.chat]` tables it leaves the file alone and asks you to merge by hand (a second table of the same name would stop Codex from loading).
 2. Installs `codex-sidebar` to `~/.local/bin`.
-3. Installs [`agent-notify`](../notify/README.md) (needs Python 3.9+) and adds `agent-notify hook codex` to `~/.codex/hooks.json` for `Stop` and `PermissionRequest` (backup kept). Trust the two hooks once in Codex with `/hooks`, and add a channel with `agent-notify setup`.
+3. Installs [`agent-notify`](../notify/README.md) (needs Python 3.9+) and adds `agent-notify hook codex` for `Stop` and `PermissionRequest` to `~/.codex/config.toml`, in a block of its own between `# >>> oh-my-config codex alerts >>>` markers (backup kept; restored if `codex doctor` rejects it). Hooks in `config.toml` keep working when another tool breaks `~/.codex/hooks.json`: Codex skips that whole file when it has a field it does not know, and the installer warns when it does. Trust the two hooks once in Codex with `/hooks`, and add a channel with `agent-notify setup`.
 4. Registers with `update.sh`, which keeps `codex-sidebar` and `agent-notify` current. The keymap block is never rewritten after install, so `/keymap` changes and hand edits stay.
 
 Uninstall: `bash ~/.local/share/oh-my-config/codex/install.sh --uninstall` (removes the block, the hooks, the scripts and the registration).
