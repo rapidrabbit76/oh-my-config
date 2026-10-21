@@ -7,6 +7,7 @@ CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 KEYBINDINGS="$CLAUDE_DIR/keybindings.json"
 MARKETPLACE="oh-my-config"
 PLUGIN="opencode-sidebar@$MARKETPLACE"
+NOTIFY="$HOME/.local/bin/agent-notify"
 REMOTE_MODE=false
 CLEANUP_DIR=""
 
@@ -90,6 +91,10 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     ok "Removed ctrl+x bindings from ${DIM}${KEYBINDINGS/#$HOME/~}${NC} (backup kept)"
   fi
   sed -i.bak '/^claude$/d' "$HOME/.config/oh-my-config/components" 2>/dev/null && rm -f "$HOME/.config/oh-my-config/components.bak" || true
+  # agent-notify is shared with the codex component; your channels file stays.
+  if [[ -f "$NOTIFY" ]] && ! grep -qx codex "$HOME/.config/oh-my-config/components" 2>/dev/null; then
+    rm -f "$NOTIFY" && ok "Removed ${NOTIFY/#$HOME/~} ${DIM}(channels kept in ~/.config/oh-my-config/notify.env)${NC}"
+  fi
 
   echo ""
   ok "Uninstall complete"
@@ -98,8 +103,8 @@ fi
 
 show_banner
 
-# ─── [1/4] Pre-flight ───────────────────────────────────
-echo -e "${BOLD}  [1/4] Pre-flight checks${NC}"
+# ─── [1/5] Pre-flight ───────────────────────────────────
+echo -e "${BOLD}  [1/5] Pre-flight checks${NC}"
 echo ""
 
 if ! command -v claude &>/dev/null; then
@@ -117,9 +122,9 @@ ok "jq"
 command -v git &>/dev/null && ok "git" || warn "git not found — sidebar git status stays empty"
 command -v gh &>/dev/null && ok "gh ${DIM}(PR status)${NC}" || warn "gh not found — sidebar PR status stays empty (optional)"
 
-# ─── [2/4] Repo clone (also the plugin's source) ─────────
+# ─── [2/5] Repo clone (also the plugin's source) ─────────
 echo ""
-echo -e "${BOLD}  [2/4] Auto-update clone${NC}"
+echo -e "${BOLD}  [2/5] Auto-update clone${NC}"
 echo ""
 
 # The plugin is read straight from this clone, so update.sh keeps it current.
@@ -130,9 +135,9 @@ else
   exit 1
 fi
 
-# ─── [3/4] Keybindings ──────────────────────────────────
+# ─── [3/5] Keybindings ──────────────────────────────────
 echo ""
-echo -e "${BOLD}  [3/4] Keybindings${NC}"
+echo -e "${BOLD}  [3/5] Keybindings${NC}"
 echo ""
 
 mkdir -p "$CLAUDE_DIR"
@@ -158,9 +163,9 @@ else
   ok "Wrote ${DIM}${KEYBINDINGS/#$HOME/~}${NC}"
 fi
 
-# ─── [4/4] Sidebar plugin ───────────────────────────────
+# ─── [4/5] Sidebar plugin ───────────────────────────────
 echo ""
-echo -e "${BOLD}  [4/4] Sidebar plugin${NC}"
+echo -e "${BOLD}  [4/5] Sidebar plugin${NC}"
 echo ""
 
 if claude plugin marketplace list 2>/dev/null | grep -qE "❯ $MARKETPLACE\$"; then
@@ -179,6 +184,26 @@ else
   exit 1
 fi
 
+# ─── [5/5] Alerts ───────────────────────────────────────
+echo ""
+echo -e "${BOLD}  [5/5] Alerts (Discord / ntfy)${NC}"
+echo ""
+
+# Keep in sync with sync_notify in ../update.sh. The launcher runs the
+# agent_notify package from the clone, which update.sh keeps current.
+mkdir -p "$(dirname "$NOTIFY")"
+cp "$SCRIPT_DIR/../notify/agent-notify" "$NOTIFY"
+chmod +x "$NOTIFY"
+ok "Installed ${DIM}${NOTIFY/#$HOME/~}${NC} ${DIM}(runs ${OMC_HOME/#$HOME/~}/notify)${NC}"
+if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' &>/dev/null; then
+  warn "Alerts need Python 3.9 or newer (python3) — until then they stay off, harmlessly"
+fi
+if "$NOTIFY" status &>/dev/null; then
+  ok "Channels set ${DIM}(agent-notify status)${NC}"
+else
+  warn "No channel yet — run ${CYAN}agent-notify setup${NC} to add a Discord webhook or an ntfy topic"
+fi
+
 # ─── Done ────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}  ╔═══════════════════════════════════════════════╗${NC}"
@@ -188,6 +213,7 @@ echo -e "${GREEN}  ║                                               ║${NC}"
 echo -e "${GREEN}  ║${NC}  ${CYAN}/sidebar${NC}    toggle the session sidebar      ${GREEN}║${NC}"
 echo -e "${GREEN}  ║${NC}  ${CYAN}ctrl+x l${NC}    sessions   ${CYAN}ctrl+x n${NC}  new       ${GREEN}║${NC}"
 echo -e "${GREEN}  ║${NC}  ${CYAN}ctrl+x m${NC}    model      ${CYAN}ctrl+x t${NC}  theme     ${GREEN}║${NC}"
+echo -e "${GREEN}  ║${NC}  ${CYAN}/notify${NC}     alerts on / off (Discord, ntfy)  ${GREEN}║${NC}"
 echo -e "${GREEN}  ║${NC}                                              ${GREEN}║${NC}"
 echo -e "${GREEN}  ║${NC}  Open sessions: run ${CYAN}/reload-plugins${NC}          ${GREEN}║${NC}"
 echo -e "${GREEN}  ║${NC}  Uninstall: ${DIM}install.sh --uninstall${NC}          ${GREEN}║${NC}"

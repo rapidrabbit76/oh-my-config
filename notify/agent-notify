@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# agent-notify — Discord / ntfy alerts from coding agents (oh-my-config/notify).
+#
+# This launcher runs the agent_notify package (Python 3.9+, standard library
+# only): the one beside it in the repo, else the oh-my-config clone that
+# update.sh keeps current. See `agent-notify --help` and notify/README.md.
+
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+self="${BASH_SOURCE[0]}"
+root="$(cd "$(dirname "$self")" && pwd)"
+[[ -d "$root/agent_notify" ]] || root="${OMC_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/oh-my-config}/notify"
+py="$(command -v python3)"
+boot='import sys; sys.path.insert(0, sys.argv.pop(1)); from agent_notify.cli import main; sys.exit(main())'
+
+case "${1:-}" in
+  hook | send | _run)
+    # Called by an agent: whatever goes wrong here, it must not fail or print.
+    [[ -n "$py" && -d "$root/agent_notify" ]] && "$py" -E -s -c "$boot" "$root" "$@" >/dev/null 2>&1
+    exit 0
+    ;;
+esac
+
+if [[ -z "$py" || ! -d "$root/agent_notify" ]]; then
+  echo "agent-notify: needs python3 and $root/agent_notify (the oh-my-config clone)" >&2
+  exit 1
+fi
+exec "$py" -E -s -c "$boot" "$root" "$@"

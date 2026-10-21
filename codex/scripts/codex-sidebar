@@ -7,13 +7,16 @@
 #   codex-sidebar --once [dir]       Print the sidebar once and exit
 #
 # Reads Codex's own state (state_*.sqlite and the session's rollout file) and git.
-# Sends nothing anywhere and adds no tokens. Needs jq and sqlite3. q closes it.
+# Sends nothing anywhere and adds no tokens. Needs jq and sqlite3. q closes it;
+# n turns Discord / ntfy alerts on or off for the thread (agent-notify, if installed).
 
 WIDTH=42
 # A pane tmux starts may not carry the login shell's PATH.
 PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin"
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+# agent-notify keeps one file per thread with alerts on (see oh-my-config/notify).
+ALERTS="${XDG_STATE_HOME:-$HOME/.local/state}/oh-my-config/notify/on/codex"
 
 C_RESET=$'\e[0m'; C_BOLD=$'\e[1m'; C_DIM=$'\e[2m'
 C_RED=$'\e[31m'; C_GREEN=$'\e[32m'; C_YELLOW=$'\e[33m'
@@ -98,6 +101,7 @@ collect() {
   DIR=$dir
   row=$(find_thread "$dir" "$prefer")
   IFS=$'\t' read -r id rollout TITLE T_MODEL T_EFFORT T_CREATED <<<"$row"
+  THREAD=$id
   ROLLOUT=""
   if [[ -n "$id" ]]; then
     [[ -f "$rollout" ]] || rollout=$(find "$CODEX_HOME/sessions" -name "*$id.jsonl" 2>/dev/null | head -1)
@@ -190,6 +194,13 @@ draw() {
   elif [[ -n "$lastturn" ]]; then
     out+="${C_DIM}last turn ${lastturn}s${C_RESET}"$'\n'
   fi
+  if command -v agent-notify &>/dev/null && [[ -n "$THREAD" ]]; then
+    if [[ -e "$ALERTS/$THREAD" ]]; then
+      out+="${C_GREEN}[x]${C_RESET} alerts ${C_DIM}Discord / ntfy (n)${C_RESET}"$'\n'
+    else
+      out+="${C_DIM}[ ] alerts Discord / ntfy (n)${C_RESET}"$'\n'
+    fi
+  fi
   [[ -n "$ctx_line" ]] && out+=$'\n'"${C_BOLD}Context${C_RESET}"$'\n'"${ctx_line}"$'\n'
   [[ -n "$limits" ]] && out+=$'\n'"${C_BOLD}Limits${C_RESET}"$'\n'"${limits}"
   [[ -n "$plan" ]] && out+=$'\n'"${C_BOLD}Plan${C_RESET}"$'\n'"${plan}"
@@ -210,13 +221,18 @@ loop() {
     collect "$target"
     cols=$(tput cols 2>/dev/null || echo "$WIDTH")
     # Redraw on a change of the rollout, the folder or the width, and every 10s for git and the clock.
-    key="$ROLLOUT:$(mtime "$ROLLOUT"):$DIR:$cols:$(($(date +%s) / 10))"
+    key="$ROLLOUT:$(mtime "$ROLLOUT"):$DIR:$cols:$(($(date +%s) / 10)):$([[ -e "$ALERTS/$THREAD" ]] && echo 1)"
     if [[ "$key" != "$last_key" ]]; then
       frame=$(draw "$cols")
       printf '\e[H%s\e[J' "${frame//$'\n'/$'\e[K\n'}"
       last_key=$key
     fi
-    read -rsn1 -t 2 k && [[ "$k" == q ]] && break
+    k=""
+    read -rsn1 -t 2 k
+    case "$k" in
+      q) break ;;
+      n) [[ -n "$THREAD" ]] && agent-notify switch codex "$THREAD" toggle &>/dev/null ;;
+    esac
   done
   [[ -n "$TMUX" ]] && tmux kill-pane -t "$TMUX_PANE"
 }

@@ -14,6 +14,7 @@ const calls = atom({ plugin: 'opencode-sidebar', key: 'calls' } as const, [])
 const mcp = atom({ plugin: 'opencode-sidebar', key: 'mcp' } as const, [])
 const parts = atom({ plugin: 'opencode-sidebar', key: 'parts' } as const, [])
 const lastTurn = atom({ plugin: 'opencode-sidebar', key: 'lastTurn' } as const, null)
+const notify = atom({ plugin: 'opencode-sidebar', key: 'notify' } as const, false)
 
 const TICK_MS = 15_000
 // The PR is fetched over the network, so on every fourth tick only.
@@ -21,6 +22,10 @@ const PR_EVERY_TICKS = 4
 const RECENT_CALLS = 5
 const CONTEXT_PARTS = 5
 const CONTEXT_WARN = 80
+// How long a permission prompt or a question waits before it counts as
+// "waiting for you" and is sent.
+const WAIT_MS = 30_000
+const ANSWER_MAX = 2000
 
 const kilo = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`)
 
@@ -51,6 +56,7 @@ let hasWarnedContext = false
 let configuredMcp: string[] = []
 let turnStartedAt = 0
 let turnTools = 0
+let waitTimer: { cancel: () => void } | undefined
 
 // Each figure on its own, so one the engine cannot answer (usage before the
 // first response, say) leaves the rest drawn instead of "Loading…" forever.
@@ -206,6 +212,64 @@ async function refreshPr($: EngineInterface) {
   await update($, pr, () => next)
 }
 
+// agent-notify (oh-my-config/notify) sends in the background and returns at
+// once, so a channel that is down or slow never holds up the session; when it
+// is missing or fails, nothing happens here.
+const AGENT_NOTIFY = 'n="$HOME/.local/bin/agent-notify"; [ -x "$n" ] || exit 3; exec "$n" "$@"'
+
+const agentNotify = async ($: EngineInterface, args: string[]) => {
+  try {
+    const ran = await $.process.run(['/bin/sh', '-c', AGENT_NOTIFY, 'sh', ...args], { timeoutMs: 5000 })
+    return ran.exitCode
+  } catch {
+    return -1
+  }
+}
+
+const isNotifying = ($: EngineInterface) => read($, notify).catch(() => false)
+
+const whereOf = async ($: EngineInterface) => {
+  const [now, repo] = await Promise.all([read($, info), read($, git)])
+  return [now?.dir, repo?.branch].filter(Boolean).join(' · ')
+}
+
+async function sendAlert($: EngineInterface, kind: 'done' | 'wait' | 'error', title: string, body: string, meta: string) {
+  if (!(await isNotifying($))) return
+  await agentNotify($, ['send', 'claude', kind, title, body.slice(0, ANSWER_MAX), meta])
+}
+
+const cancelWait = () => {
+  waitTimer?.cancel()
+  waitTimer = undefined
+}
+
+// Sent only if nothing moves for WAIT_MS: an answer ends the tool call, a
+// running tool draws progress, and a new prompt or the turn's end cancels it.
+function armWait($: EngineInterface, body: string) {
+  cancelWait()
+  waitTimer = $.clock.after(WAIT_MS, () => {
+    waitTimer = undefined
+    void (async () => {
+      const [name, where] = await Promise.all([read($, title).catch(() => ''), whereOf($).catch(() => '')])
+      await sendAlert($, 'wait', `Waiting for you${name ? ` · ${name}` : ''}`, body, where)
+    })().catch(() => undefined)
+  })
+}
+
+async function toggleNotify($: EngineInterface) {
+  const on = !(await isNotifying($))
+  await update($, notify, () => on)
+  if (!on) {
+    cancelWait()
+    $.ui.toast('Alerts off for this session')
+    return
+  }
+  const status = await agentNotify($, ['status'])
+  if (status === 3) $.ui.toast('Alerts on, but agent-notify is not installed (oh-my-config claude/install.sh)')
+  else if (status !== 0) $.ui.toast('Alerts on, but no channel is set: run `agent-notify setup` in a shell')
+  else $.ui.toast('Alerts on: Discord / ntfy when a turn ends or waits for you')
+}
+
 const serverKey = (name: string) => name.replace(/[^a-zA-Z0-9]/g, '_')
 
 // The servers in ~/.claude.json (user and this project's) and ./.mcp.json.
@@ -245,6 +309,15 @@ async function refreshMcp($: EngineInterface) {
   await update($, mcp, () => next)
 }
 
+async function alertTurn($: EngineInterface, reason: string, answer: string, ms: number) {
+  const [name, where] = await Promise.all([read($, title), whereOf($)])
+  const kind = reason === 'error' || reason === 'refusal' ? 'error' : 'done'
+  const head = kind === 'error' ? 'Turn failed' : 'Done'
+  const seconds = Math.round(ms / 1000)
+  const took = seconds < 60 ? `${seconds}s` : duration(ms)
+  await sendAlert($, kind, name ? `${head} · ${name}` : head, answer, `${where} · ${took}`)
+}
+
 async function refreshAll($: EngineInterface) {
   await Promise.all([
     refresh($).catch(() => undefined),
@@ -268,6 +341,11 @@ export const register: Register = on => {
     await $.command.register({
       name: 'sidebar',
       description: 'Toggle the opencode-style session sidebar',
+      immediate: true,
+    })
+    await $.command.register({
+      name: 'notify',
+      description: 'Toggle Discord / ntfy alerts for this session (agent-notify)',
       immediate: true,
     })
     const started = await next(e)
@@ -303,6 +381,12 @@ export const register: Register = on => {
     return {}
   })
 
+  on('command.run', { command: 'notify' }, async $ => {
+    await toggleNotify($)
+
+    return {}
+  })
+
   on('command.run', { command: 'rename' }, async ($, e, next) => {
     const ran = await next(e)
     await refreshTitle($).catch(() => undefined)
@@ -311,6 +395,7 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
+    cancelWait()
     turnStartedAt = await $.clock.now()
     turnTools = 0
 
@@ -330,9 +415,36 @@ export const register: Register = on => {
       await refreshAll($)
       void refreshTitle($).catch(() => undefined)
       void refreshParts($).catch(() => undefined)
+      cancelWait()
+      if (!e.isAborted) void alertTurn($, e.reason, e.answer, e.durationMs).catch(() => undefined)
     }
 
     return done
+  })
+
+  // The engine's own "needs your permission" notice; sent if still unanswered after WAIT_MS.
+  on('classic.Notification', async ($, e, next) => {
+    const result = await next(e)
+    if (e.notification_type === 'permission_prompt' || e.notification_type === 'elicitation_dialog') {
+      if (await isNotifying($)) armWait($, e.message)
+    }
+
+    return result
+  }).catch(($, e, next) => (next.called ? undefined : next(e)))
+
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    if (e.agentId === undefined && (await isNotifying($))) {
+      armWait($, e.questions.map(q => q.question).join('\n'))
+    }
+
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  // A tool drawing progress is running, so its permission was given.
+  on('ui.render', { component: 'ToolProgress' }, ($, e, next) => {
+    cancelWait()
+
+    return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
@@ -346,7 +458,8 @@ export const register: Register = on => {
     }
     await update($, calls, list => [...list, call].slice(-RECENT_CALLS))
     const ran = await next(e)
-    const state = ran.deny === undefined && !ran.isError ? 'ok' : 'fail'
+    cancelWait()
+    const state: Call['state'] = ran.deny === undefined && !ran.isError ? 'ok' : 'fail'
     await update($, calls, list => list.map(c => (c.id === id ? { ...c, state } : c)))
     if (e.tool === 'Bash') {
       // A command may have switched branch or worktree, or pushed or opened a PR.
@@ -404,7 +517,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock] =
+    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts] =
       await Promise.all([
         read($, info),
         read($, title),
@@ -416,6 +529,7 @@ export const register: Register = on => {
         read($, parts),
         read($, lastTurn),
         $.clock.now(),
+        read($, notify),
       ])
     const width = Math.max(10, Math.min(28, (e.viewport?.columns ?? 32) - 4))
 
@@ -497,6 +611,9 @@ export const register: Register = on => {
             export
           </Button>
         </Box>
+        <Button key="notify" hotkey="n" onPress={() => void toggleNotify($)}>
+          {alerts ? '[x]' : '[ ]'} alerts <Text dimColor>Discord / ntfy</Text>
+        </Button>
 
         <Box flexDirection="column">
           <Text bold>Context</Text>

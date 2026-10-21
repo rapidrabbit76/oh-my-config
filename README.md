@@ -85,7 +85,7 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 
 ## Claude Code
 
-opencode-style Claude Code — a session sidebar (title, branch / worktree, PR + CI, context breakdown, rate limits, MCP status, todos, recent tool calls) and `ctrl+x` leader keys.
+opencode-style Claude Code — a session sidebar (title, branch / worktree, PR + CI, context breakdown, rate limits, MCP status, todos, recent tool calls), `ctrl+x` leader keys, and Discord / ntfy alerts when a turn ends or waits for you ([agent-notify](notify/README.md)).
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/claude/install.sh)
@@ -95,7 +95,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/m
 
 ## Codex CLI
 
-opencode-style Codex CLI — `ctrl-x` leader keys and a tmux session sidebar (thread title, branch / worktree, context, rate limits, plan, recent tool calls).
+opencode-style Codex CLI — `ctrl-x` leader keys, a tmux session sidebar (thread title, branch / worktree, context, rate limits, plan, recent tool calls) and the same Discord / ntfy alerts.
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/codex/install.sh)
@@ -161,6 +161,11 @@ oh-my-config/
 │   ├── keymap.toml
 │   ├── README.md                 ← detailed docs
 │   └── scripts/codex-sidebar
+├── notify/                       agent-notify: Discord / ntfy alerts (installed by claude/ and codex/)
+│   ├── agent-notify              launcher (~/.local/bin)
+│   ├── agent_notify/             Python package: agents/, channels/
+│   ├── tests/
+│   └── README.md                 ← detailed docs
 ├── .claude-plugin/
 │   └── marketplace.json          lists the plugin for /plugin install
 ├── update.sh                     auto-update (config sync)

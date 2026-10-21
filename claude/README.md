@@ -17,6 +17,7 @@ The installer:
 1. Clones this repo to `~/.local/share/oh-my-config` (shared with the other components' auto-update).
 2. Merges the bindings in [`keybindings.json`](keybindings.json) into `~/.claude/keybindings.json`. A chord you already bind keeps your action; the old file is kept as `keybindings.json.bak.<timestamp>`.
 3. Adds that clone as the `oh-my-config` plugin marketplace and installs `opencode-sidebar@oh-my-config`. The plugin is read from the clone itself, so `update.sh` keeps it current.
+4. Installs [`agent-notify`](../notify/README.md) to `~/.local/bin` for Discord / ntfy alerts (needs Python 3.9+). Run `agent-notify setup` once to add a channel.
 
 Uninstall: `bash ~/.local/share/oh-my-config/claude/install.sh --uninstall` (removes the plugin, the marketplace and only the bindings it added).
 
@@ -54,6 +55,7 @@ opus-5-5 · 14 turns · 1h20m
 last turn 48s · 7 tools
 
 [compact] [rename] [export]                   click, or c / r / e while focused
+[ ] alerts Discord / ntfy                     n, or /notify: alerts for this session
 
 Context
 ████████░░░░░░  52%
@@ -75,6 +77,12 @@ Recent                                        last 5 tool calls
 ✓ Bash git status
 ```
 
+## Alerts
+
+`[ ] alerts` in the sidebar, or `/notify`, turns on Discord / ntfy alerts for this session: one when a turn ends (not an interrupted one, nor a subagent's), and one when a permission prompt or a question has waited 30 seconds for you. Channels are set with `agent-notify setup`; see [notify](../notify/README.md). A channel that is down never slows or breaks the session.
+
+## Refresh
+
 It refreshes every 15 seconds and after each turn (the PR every minute, or right after `git push` / `gh pr`). It adds no tokens: everything is read from the engine or local commands, and the context breakdown is estimated locally.
 
 ## Structure
@@ -86,6 +94,7 @@ claude/
 └── opencode-sidebar/             the plugin (listed in ../.claude-plugin/marketplace.json)
     ├── .claude-plugin/plugin.json
     ├── hooks/hooks.json
-    ├── hooks/register.tsx        sidebar pane, hint row, /sidebar
+    ├── hooks/register.tsx        sidebar pane, hint row, /sidebar, /notify
+    ├── tests/notify.test.tsx     claude plugin test claude/opencode-sidebar
     └── types/index.d.ts          its state contract
 ```

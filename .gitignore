@@ -2,3 +2,7 @@
 .serena/project.yml
 .omc/
 .omo/
+
+# Python bytecode (notify/agent_notify)
+__pycache__/
+*.pyc

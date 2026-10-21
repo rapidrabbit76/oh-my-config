@@ -16,9 +16,10 @@ The installer:
 
 1. Appends [`keymap.toml`](keymap.toml) to `~/.codex/config.toml` between `# >>> oh-my-config codex keymap >>>` markers, checks with `codex doctor` that Codex still loads the config, and restores the backup if not. If your config already has `[tui.keymap.global]` or `[tui.keymap.chat]` tables it leaves the file alone and asks you to merge by hand (a second table of the same name would stop Codex from loading).
 2. Installs `codex-sidebar` to `~/.local/bin`.
-3. Registers with `update.sh`, which keeps `codex-sidebar` current. The keymap block is never rewritten after install, so `/keymap` changes and hand edits stay.
+3. Installs [`agent-notify`](../notify/README.md) (needs Python 3.9+) and adds `agent-notify hook codex` to `~/.codex/hooks.json` for `Stop` and `PermissionRequest` (backup kept). Trust the two hooks once in Codex with `/hooks`, and add a channel with `agent-notify setup`.
+4. Registers with `update.sh`, which keeps `codex-sidebar` and `agent-notify` current. The keymap block is never rewritten after install, so `/keymap` changes and hand edits stay.
 
-Uninstall: `bash ~/.local/share/oh-my-config/codex/install.sh --uninstall` (removes the block, the script and the registration).
+Uninstall: `bash ~/.local/share/oh-my-config/codex/install.sh --uninstall` (removes the block, the hooks, the scripts and the registration).
 
 ## Keys
 
@@ -48,6 +49,7 @@ my-project
 ⎇ main worktree                           or: worktree <name>
 gpt-5.5 · high · 8 turns · 1h20m
 last turn 21s                             or: ● working
+[ ] alerts Discord / ntfy (n)             n: alerts for this thread
 
 Context
 █████████░░░░░░░░░░░░░░░ 40%
@@ -68,6 +70,10 @@ Recent                                    last 5 tool calls
 It picks the newest thread whose folder is the pane's folder (a CLI thread first when Codex runs in the pane), from `~/.codex/state_*.sqlite`, and reads that thread's rollout file. It redraws when the rollout changes and every 10 seconds for git. Nothing is sent anywhere and no tokens are used.
 
 `codex-sidebar --once [dir]` prints it once.
+
+## Alerts
+
+`n` in the sidebar turns on Discord / ntfy alerts for the thread it shows: one when a turn ends, and one when an approval has waited 30 seconds. Without the sidebar, `agent-notify codex on` in the project folder does the same for its newest thread. See [notify](../notify/README.md); a channel that is down never slows or breaks Codex.
 
 ## Structure
 

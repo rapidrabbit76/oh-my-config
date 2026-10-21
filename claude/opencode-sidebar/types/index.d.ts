@@ -57,6 +57,8 @@ declare module 'claude-code' {
       mcp: Mcp[]
       parts: ContextPart[]
       lastTurn: Turn | null
+      // Alerts to Discord / ntfy through agent-notify, for this session.
+      notify: boolean
     }
   }
 }

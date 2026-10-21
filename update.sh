@@ -87,14 +87,23 @@ KEYBINDINGS_MERGE='.[1].bindings as $ours | .[0] | .bindings = (reduce $ours[] a
     else . end)
   else . + [$b] end))'
 
-# The keymap block in ~/.codex/config.toml is added once by codex/install.sh and
-# then left to the user; only the sidebar script is synced.
+# agent-notify is shared by the claude and codex components.
+sync_notify() {
+  sync_file notify/agent-notify "$HOME/.local/bin/agent-notify"
+  chmod +x "$HOME/.local/bin/agent-notify" 2>/dev/null
+}
+
+# The keymap block in ~/.codex/config.toml and the hooks in ~/.codex/hooks.json
+# are added once by codex/install.sh and then left to the user; only the
+# scripts are synced.
 sync_codex() {
   sync_file codex/scripts/codex-sidebar "$HOME/.local/bin/codex-sidebar"
   chmod +x "$HOME/.local/bin/codex-sidebar" 2>/dev/null
+  sync_notify
 }
 
 sync_claude() {
+  sync_notify
   local src="$OMC_HOME/claude/keybindings.json"
   local dest="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/keybindings.json" merged
   if [[ -f "$src" && -f "$dest" ]] && command -v jq &>/dev/null; then
