@@ -1,0 +1,91 @@
+# Claude Code
+
+opencode-style Claude Code: a session sidebar and `ctrl+x` leader keys, as a Claude Code plugin (a "mod") plus a few keybindings.
+
+## Install
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/claude/install.sh)
+```
+
+Then run `/reload-plugins` in any Claude Code session that was already open.
+
+Requirements: Claude Code 2.1.287 or newer (plugin hooks modules), `jq`. Optional: `git` (branch / worktree), `gh` (PR status).
+
+The installer:
+
+1. Clones this repo to `~/.local/share/oh-my-config` (shared with the other components' auto-update).
+2. Merges the bindings in [`keybindings.json`](keybindings.json) into `~/.claude/keybindings.json`. A chord you already bind keeps your action; the old file is kept as `keybindings.json.bak.<timestamp>`.
+3. Adds that clone as the `oh-my-config` plugin marketplace and installs `opencode-sidebar@oh-my-config`. The plugin is read from the clone itself, so `update.sh` keeps it current.
+
+Uninstall: `bash ~/.local/share/oh-my-config/claude/install.sh --uninstall` (removes the plugin, the marketplace and only the bindings it added).
+
+Only the plugin alone, without the keybindings (the leader keys then do nothing):
+
+```
+/plugin install opencode-sidebar --marketplace rapidrabbit76/oh-my-config
+```
+
+## Keys
+
+| Key | Action |
+|---|---|
+| `ctrl+x l` | Session list (`/resume`) |
+| `ctrl+x n` | New session (`/clear`) |
+| `ctrl+x t` | Theme (`/theme`) |
+| `ctrl+x m` | Model picker |
+| `ctrl+x e` | Edit the prompt in `$EDITOR` |
+| `ctrl+x a` | Cycle mode (default → accept edits → plan) |
+| `ctrl+x q` | Quit |
+
+`keybindings.json` can only bind Claude Code's own actions, not slash commands. So `ctrl+x l`, `n` and `t` are bound to diff-panel actions that do nothing at the prompt, and the plugin draws a hint row above the prompt whose buttons claim those actions and run `/resume`, `/clear` and `/theme`. While the diff panel is open those three chords do their diff-panel job instead.
+
+## Sidebar
+
+`/sidebar` toggles it. In the fullscreen renderer (`/tui fullscreen`) it docks beside the transcript, and opens by itself when the terminal is at least 144 columns wide.
+
+```
+Fix login redirect loop                       session title (/rename wins)
+my-project
+ main*  ↑1                                    branch, dirty, ahead / behind
+#12 open · CI ✓                               PR of this branch (gh)
+⎇ main worktree                               or: worktree <name>
+opus-5-5 · 14 turns · 1h20m
+last turn 48s · 7 tools
+
+[compact] [rename] [export]                   click, or c / r / e while focused
+
+Context
+████████░░░░░░  52%
+104k / 200k tokens · $1.23
+■ Messages 52k                                what fills the window (/context)
+■ System tools 31k
+
+Limits
+5h   6% used  ↻ 3h12m                         used, and time until reset
+7d  41% used  ↻ 3d2h
+
+MCP 6/9
+✗ playwright                                  configured servers with no tools
+
+Todo
+▸ current task
+
+Recent                                        last 5 tool calls
+✓ Bash git status
+```
+
+It refreshes every 15 seconds and after each turn (the PR every minute, or right after `git push` / `gh pr`). It adds no tokens: everything is read from the engine or local commands, and the context breakdown is estimated locally.
+
+## Structure
+
+```
+claude/
+├── install.sh
+├── keybindings.json              ctrl+x bindings merged into ~/.claude/keybindings.json
+└── opencode-sidebar/             the plugin (listed in ../.claude-plugin/marketplace.json)
+    ├── .claude-plugin/plugin.json
+    ├── hooks/hooks.json
+    ├── hooks/register.tsx        sidebar pane, hint row, /sidebar
+    └── types/index.d.ts          its state contract
+```

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://www.schemastore.org/claude-code-keybindings.json",
+  "$docs": "https://code.claude.com/docs/en/keybindings",
+  "bindings": [
+    {
+      "context": "Global",
+      "bindings": {
+        "ctrl+x q": "app:exit",
+        "ctrl+x l": "app:cycleDiffBase",
+        "ctrl+x n": "app:toggleDiffNoiseFilter",
+        "ctrl+x t": "app:toggleDiffPreSession"
+      }
+    },
+    {
+      "context": "Chat",
+      "bindings": {
+        "ctrl+x m": "chat:modelPicker",
+        "ctrl+x e": "chat:externalEditor",
+        "ctrl+x a": "chat:cycleMode"
+      }
+    }
+  ]
+}

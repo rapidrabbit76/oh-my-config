@@ -4,7 +4,7 @@
 #   update.sh                     Update now (fetch + sync every installed component)
 #   update.sh --auto              Shell startup hook: asks "Update now? [Y/n]" when a check found
 #                                 a new version (checks run once a day in the background)
-#   update.sh --register <name>   Called by installers (tmux | yazi | nvim)
+#   update.sh --register <name>   Called by installers (tmux | yazi | nvim | claude)
 #
 # Only config files are synced. Packages, ~/.zshrc and *.local files are never touched.
 # Local edits are kept; if upstream changed the same file, the local copy is saved as
@@ -78,6 +78,32 @@ sync_nvim() {
   done
 }
 
+# Adds the repo's bindings to the user's file; a chord the user binds keeps the
+# user's action. Keep in sync with KEYBINDINGS_MERGE in claude/install.sh
+KEYBINDINGS_MERGE='.[1].bindings as $ours | .[0] | .bindings = (reduce $ours[] as $b (.bindings // [];
+  if any(.[]; .context == $b.context)
+  then map(if .context == $b.context then .bindings = $b.bindings + .bindings else . end)
+  else . + [$b] end))'
+
+sync_claude() {
+  local src="$OMC_HOME/claude/keybindings.json"
+  local dest="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/keybindings.json" merged
+  if [[ -f "$src" && -f "$dest" ]] && command -v jq &>/dev/null; then
+    merged=$(jq -s "$KEYBINDINGS_MERGE" "$dest" "$src") &&
+      ! cmp -s <(printf '%s\n' "$merged") <(jq . "$dest") && {
+      cp -p "$dest" "$dest.bak.$(date +%Y%m%d%H%M%S)"
+      printf '%s\n' "$merged" >"$dest"
+      CHANGED+=("$dest")
+    }
+  fi
+  # The plugin is read from this clone itself, so the reset above already
+  # updated it; open sessions pick it up with /reload-plugins.
+  if [[ -n "$OLD_REV" ]] &&
+    [[ -n "$(git -C "$OMC_HOME" diff --name-only "$OLD_REV" HEAD -- claude/opencode-sidebar 2>/dev/null)" ]]; then
+    CHANGED+=("opencode-sidebar plugin (run /reload-plugins in open Claude Code sessions)")
+  fi
+}
+
 install_hook() {
   local rc="$HOME/.zshrc" home='$HOME'
   [[ -f "$rc" ]] || rc="$HOME/.bashrc"
@@ -87,7 +113,7 @@ install_hook() {
 }
 
 register() {
-  case "$1" in tmux | yazi | nvim) ;; *) echo "unknown component: $1" >&2; return 1 ;; esac
+  case "$1" in tmux | yazi | nvim | claude) ;; *) echo "unknown component: $1" >&2; return 1 ;; esac
   ensure_clone || return 1
   mkdir -p "$(dirname "$COMPONENTS_FILE")"
   grep -qx "$1" "$COMPONENTS_FILE" 2>/dev/null || echo "$1" >>"$COMPONENTS_FILE"
@@ -120,7 +146,7 @@ sync_all() {
   new_rev=$(git -C "$OMC_HOME" rev-parse HEAD)
 
   while read -r comp; do
-    case "$comp" in tmux | yazi | nvim) "sync_$comp" ;; esac
+    case "$comp" in tmux | yazi | nvim | claude) "sync_$comp" ;; esac
   done <"$COMPONENTS_FILE"
 
   if (( ${#CHANGED[@]} )); then

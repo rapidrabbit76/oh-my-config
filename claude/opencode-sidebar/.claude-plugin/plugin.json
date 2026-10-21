@@ -1,0 +1,10 @@
+{
+  "name": "opencode-sidebar",
+  "version": "0.1.0",
+  "description": "opencode-style session sidebar and ctrl+x leader keys for Claude Code",
+  "author": {
+    "name": "rapidrabbit76"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

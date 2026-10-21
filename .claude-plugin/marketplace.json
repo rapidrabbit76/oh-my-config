@@ -1,0 +1,14 @@
+{
+  "name": "oh-my-config",
+  "description": "Plugins from oh-my-config dotfiles",
+  "owner": {
+    "name": "rapidrabbit76"
+  },
+  "plugins": [
+    {
+      "name": "opencode-sidebar",
+      "source": "./claude/opencode-sidebar",
+      "description": "opencode-style session sidebar and ctrl+x leader keys for Claude Code"
+    }
+  ]
+}

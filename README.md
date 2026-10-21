@@ -6,7 +6,7 @@ Portable, cross-platform terminal configs that survive across macOS, Linux, and 
 
 ## Full Setup (all at once)
 
-Install everything — zsh + tmux + yazi + nvim:
+Install everything — zsh + tmux + yazi + nvim (add [Claude Code](#claude-code) separately if you use it):
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/zsh/install.sh) && \
@@ -83,9 +83,19 @@ bash <(wget -qO- https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/ma
 
 > [**Full documentation →**](nvim/README.md)
 
+## Claude Code
+
+opencode-style Claude Code — a session sidebar (title, branch / worktree, PR + CI, context breakdown, rate limits, MCP status, todos, recent tool calls) and `ctrl+x` leader keys.
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/rapidrabbit76/oh-my-config/main/claude/install.sh)
+```
+
+> [**Full documentation →**](claude/README.md)
+
 ## Auto-update
 
-The tmux, yazi and nvim installers keep a clone of this repo in `~/.local/share/oh-my-config` and add one line to `~/.zshrc`.
+The tmux, yazi, nvim and claude installers keep a clone of this repo in `~/.local/share/oh-my-config` and add one line to `~/.zshrc`.
 Like oh-my-zsh, it asks before updating: once a day it checks GitHub in the background, and when a new version exists
 the next shell asks `[oh-my-config] Update available (…). Update now? [Y/n]`. Answering `n` skips that version.
 
@@ -131,6 +141,13 @@ oh-my-config/
 │   ├── lua/config/               base options/keymaps/autocmds/lazy
 │   ├── lua/plugins/example.lua   LazyVim starter example
 │   └── themes/                   6 colorscheme templates
+├── claude/                       Claude Code sidebar plugin + keybindings
+│   ├── install.sh
+│   ├── keybindings.json
+│   ├── README.md                 ← detailed docs
+│   └── opencode-sidebar/         the plugin
+├── .claude-plugin/
+│   └── marketplace.json          lists the plugin for /plugin install
 ├── update.sh                     auto-update (config sync)
 └── README.md
 ```
