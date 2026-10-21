@@ -82,7 +82,9 @@ sync_nvim() {
 # user's action. Keep in sync with KEYBINDINGS_MERGE in claude/install.sh
 KEYBINDINGS_MERGE='.[1].bindings as $ours | .[0] | .bindings = (reduce $ours[] as $b (.bindings // [];
   if any(.[]; .context == $b.context)
-  then map(if .context == $b.context then .bindings = $b.bindings + .bindings else . end)
+  then map(if .context == $b.context
+    then .bindings as $m | .bindings = $m + ($b.bindings | with_entries(select(.key as $k | $m | has($k) | not)))
+    else . end)
   else . + [$b] end))'
 
 sync_claude() {
@@ -90,7 +92,7 @@ sync_claude() {
   local dest="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/keybindings.json" merged
   if [[ -f "$src" && -f "$dest" ]] && command -v jq &>/dev/null; then
     merged=$(jq -s "$KEYBINDINGS_MERGE" "$dest" "$src") &&
-      ! cmp -s <(printf '%s\n' "$merged") <(jq . "$dest") && {
+      ! cmp -s <(printf '%s\n' "$merged" | jq -S .) <(jq -S . "$dest") && {
       cp -p "$dest" "$dest.bak.$(date +%Y%m%d%H%M%S)"
       printf '%s\n' "$merged" >"$dest"
       CHANGED+=("$dest")

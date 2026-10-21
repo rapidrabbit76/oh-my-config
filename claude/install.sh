@@ -42,7 +42,9 @@ error() { echo -e "${RED}  ✗${NC} $1"; }
 # the user's action. Keep in sync with sync_claude in ../update.sh
 KEYBINDINGS_MERGE='.[1].bindings as $ours | .[0] | .bindings = (reduce $ours[] as $b (.bindings // [];
   if any(.[]; .context == $b.context)
-  then map(if .context == $b.context then .bindings = $b.bindings + .bindings else . end)
+  then map(if .context == $b.context
+    then .bindings as $m | .bindings = $m + ($b.bindings | with_entries(select(.key as $k | $m | has($k) | not)))
+    else . end)
   else . + [$b] end))'
 
 # Removes exactly the bindings we added (same chord, same action).
@@ -137,7 +139,7 @@ mkdir -p "$CLAUDE_DIR"
 if [[ -f "$KEYBINDINGS" ]]; then
   tmp="$(mktemp)"
   jq -s "$KEYBINDINGS_MERGE" "$KEYBINDINGS" "$SCRIPT_DIR/keybindings.json" >"$tmp"
-  if cmp -s "$tmp" <(jq . "$KEYBINDINGS"); then
+  if cmp -s <(jq -S . "$tmp") <(jq -S . "$KEYBINDINGS"); then
     rm -f "$tmp"
     ok "Already set in ${DIM}${KEYBINDINGS/#$HOME/~}${NC}"
   else
