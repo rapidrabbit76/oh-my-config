@@ -16,6 +16,7 @@ const parts = atom({ plugin: 'opencode-sidebar', key: 'parts' } as const, [])
 const lastTurn = atom({ plugin: 'opencode-sidebar', key: 'lastTurn' } as const, null)
 const notify = atom({ plugin: 'opencode-sidebar', key: 'notify' } as const, false)
 const away = atom({ plugin: 'opencode-sidebar', key: 'away' } as const, false)
+const sound = atom({ plugin: 'opencode-sidebar', key: 'sound' } as const, null)
 
 const TICK_MS = 15_000
 // The PR is fetched over the network, so on every fourth tick only.
@@ -361,6 +362,28 @@ async function toggleAway($: EngineInterface) {
   }
 }
 
+// peon-ping's own mute switch, the one its CLI and /peon-ping-toggle flip:
+// `peon.sh toggle` creates or removes .paused and syncs it to the other
+// adapters. Prints the state after; exit 3 when peon-ping is not installed.
+const PEON_SOUND = `
+p="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/peon-ping"
+[ -f "$p/peon.sh" ] || exit 3
+[ "$1" = toggle ] && bash "$p/peon.sh" toggle >/dev/null
+[ -f "$p/.paused" ] && echo paused || echo active
+`
+
+async function refreshSound($: EngineInterface, args: string[] = []) {
+  const ran = await $.process.run(['/bin/sh', '-c', PEON_SOUND, 'sh', ...args], { timeoutMs: 5000 })
+  const next = ran.exitCode === 0 ? ran.stdout.trim() === 'active' : null
+  await update($, sound, () => next)
+  return next
+}
+
+async function toggleSound($: EngineInterface) {
+  const on = await refreshSound($, ['toggle'])
+  $.ui.toast(on === null ? 'peon-ping is not installed' : on ? 'Sounds on (peon-ping)' : 'Sounds muted (peon-ping)')
+}
+
 const serverKey = (name: string) => name.replace(/[^a-zA-Z0-9]/g, '_')
 
 // The servers in ~/.claude.json (user and this project's) and ./.mcp.json.
@@ -414,6 +437,8 @@ async function refreshAll($: EngineInterface) {
     refresh($).catch(() => undefined),
     refreshGit($).catch(() => undefined),
     refreshMcp($).catch(() => undefined),
+    // Also picks up a toggle made outside the sidebar (the peon CLI, say).
+    refreshSound($).catch(() => undefined),
   ])
 }
 
@@ -689,7 +714,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts, isAwayOn] =
+    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts, isAwayOn, isSoundOn] =
       await Promise.all([
         read($, info),
         read($, title),
@@ -703,6 +728,7 @@ export const register: Register = on => {
         $.clock.now(),
         read($, notify),
         read($, away),
+        read($, sound),
       ])
     const width = Math.max(10, Math.min(28, (e.viewport?.columns ?? 32) - 4))
 
@@ -785,12 +811,17 @@ export const register: Register = on => {
           </Button>
         </Box>
         <Box flexDirection="column">
-          <Button key="notify" hotkey="n" onPress={() => void toggleNotify($)}>
-            {alerts ? '[x]' : '[ ]'} alerts <Text dimColor>Discord / ntfy</Text>
+          <Button key="notify" hotkey="n" plain onPress={() => void toggleNotify($)}>
+            {alerts ? '●' : '○'} alerts <Text dimColor>Discord / ntfy</Text>
           </Button>
-          <Button key="away" hotkey="a" onPress={() => void toggleAway($)}>
-            {isAwayOn ? '[x]' : '[ ]'} away <Text dimColor>answer in Discord</Text>
+          <Button key="away" hotkey="a" plain onPress={() => void toggleAway($)}>
+            {isAwayOn ? '●' : '○'} away <Text dimColor>answer in Discord</Text>
           </Button>
+          {isSoundOn !== null && (
+            <Button key="sound" hotkey="s" plain onPress={() => void toggleSound($)}>
+              {isSoundOn ? '●' : '○'} sound <Text dimColor>peon-ping</Text>
+            </Button>
+          )}
         </Box>
 
         <Box flexDirection="column">

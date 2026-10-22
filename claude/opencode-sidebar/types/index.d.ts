@@ -61,6 +61,8 @@ declare module 'claude-code' {
       notify: boolean
       // Away: questions, approvals and prompts from Discord too (agent-notify's bridge).
       away: boolean
+      // peon-ping's sounds on (not paused); null when peon-ping is not installed.
+      sound: boolean | null
     }
   }
 }

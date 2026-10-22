@@ -141,9 +141,9 @@ test('the sidebar button toggles alerts', async ($, on) => {
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ type: 'Button', key: 'notify' }))?.text).toMatch(/\[ \] alerts/)
+    expect((await ui.find({ type: 'Button', key: 'notify' }))?.text).toMatch(/○ alerts/)
     await ui.press({ key: 'notify' })
-    expect((await ui.find({ type: 'Button', key: 'notify' }))?.text).toMatch(/\[x\] alerts/)
+    expect((await ui.find({ type: 'Button', key: 'notify' }))?.text).toMatch(/● alerts/)
     await ui.press({ key: 'notify' })
     await ui.unmount()
   }
