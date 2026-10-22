@@ -58,6 +58,9 @@ const LEADER = [
   { key: 'n', label: 'new', command: 'clear', action: 'app:toggleDiffNoiseFilter' },
   { key: 't', label: 'theme', command: 'theme', action: 'app:toggleDiffPreSession' },
 ] as const
+// ctrl+x tab: the sidebar takes the keys, so its hotkeys (n, a, s, ...) work.
+// No engine action focuses a pane; this one does nothing at the prompt.
+const SIDEBAR_ACTION = 'diff:back'
 
 let tick: { cancel: () => void } | undefined
 let ticks = 0
@@ -942,6 +945,14 @@ export const register: Register = on => {
         <Text>
           <Text dimColor>ctrl+x m</Text> model
         </Text>
+        <Button
+          key="sidebar"
+          plain
+          action={SIDEBAR_ACTION}
+          onPress={() => void $.ui.open({ id: PANE, title: TITLE, focus: true })}
+        >
+          <Text dimColor>ctrl+x tab</Text> sidebar
+        </Button>
       </Box>
     )
   })

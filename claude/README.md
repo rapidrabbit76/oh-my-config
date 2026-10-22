@@ -37,9 +37,10 @@ Only the plugin alone, without the keybindings (the leader keys then do nothing)
 | `ctrl+x m` | Model picker |
 | `ctrl+x e` | Edit the prompt in `$EDITOR` |
 | `ctrl+x a` | Cycle mode (default → accept edits → plan) |
+| `ctrl+x tab` | Focus the sidebar, so its keys work (Esc gives the prompt back) |
 | `ctrl+x q` | Quit |
 
-`keybindings.json` can only bind Claude Code's own actions, not slash commands. So `ctrl+x l`, `n` and `t` are bound to diff-panel actions that do nothing at the prompt, and the plugin draws a hint row above the prompt whose buttons claim those actions and run `/resume`, `/clear` and `/theme`. While the diff panel is open those three chords do their diff-panel job instead.
+`keybindings.json` can only bind Claude Code's own actions, not slash commands. So `ctrl+x l`, `n` and `t` are bound to diff-panel actions that do nothing at the prompt, and the plugin draws a hint row above the prompt whose buttons claim those actions and run `/resume`, `/clear` and `/theme`. While the diff panel is open those three chords do their diff-panel job instead. `ctrl+x tab` (Claude Code's own focuses the hint row) is bound the same way, to a diff-dialog action, and opens the sidebar with the keys.
 
 ## Sidebar
 
@@ -54,9 +55,10 @@ my-project
 opus-5-5 · 14 turns · 1h20m
 last turn 48s · 7 tools
 
-[compact] [rename] [export]                   click, or c / r / e while focused
-[ ] alerts Discord / ntfy                     n, or /notify: alerts for this session
-[ ] away answer in Discord                    a, or /away: answer and prompt from Discord
+[ compact ] [ rename ] [ export ]             click, or c / r / e while focused (ctrl+x tab)
+n: ○ alerts Discord / ntfy                    n, or /notify: alerts for this session
+a: ○ away answer in Discord                   a, or /away: answer and prompt from Discord
+s: ● sound peon-ping                          s, or /sound: mute / unmute peon-ping (when installed)
 
 Context
 ████████░░░░░░  52%
@@ -80,9 +82,9 @@ Recent                                        last 5 tool calls
 
 ## Alerts
 
-`[ ] alerts` in the sidebar, or `/notify`, turns on Discord / ntfy alerts for this session: one when a turn ends (not an interrupted one, nor a subagent's), and one when a permission prompt or a question has waited 30 seconds for you. Channels are set with `agent-notify setup`; see [notify](../notify/README.md). A channel that is down never slows or breaks the session.
+`○ alerts` in the sidebar, or `/notify`, turns on Discord / ntfy alerts for this session: one when a turn ends (not an interrupted one, nor a subagent's), and one when a permission prompt or a question has waited 30 seconds for you. Channels are set with `agent-notify setup`; see [notify](../notify/README.md). A channel that is down never slows or breaks the session.
 
-`[ ] away`, or `/away`, goes further: questions and approvals also go to Discord to answer there (react, or reply), and a reply to an alert becomes a prompt in this session. It needs a Discord bot; see [Answering from Discord](../notify/README.md#answering-from-discord-away).
+`○ away`, or `/away`, goes further: questions and approvals also go to Discord to answer there (react, or reply), and a reply to an alert becomes a prompt in this session. It needs a Discord bot; see [Answering from Discord](../notify/README.md#answering-from-discord-away).
 
 ## Refresh
 

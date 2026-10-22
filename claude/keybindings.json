@@ -16,7 +16,8 @@
       "bindings": {
         "ctrl+x m": "chat:modelPicker",
         "ctrl+x e": "chat:externalEditor",
-        "ctrl+x a": "chat:cycleMode"
+        "ctrl+x a": "chat:cycleMode",
+        "ctrl+x tab": "diff:back"
       }
     }
   ]
