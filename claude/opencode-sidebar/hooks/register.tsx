@@ -469,6 +469,11 @@ export const register: Register = on => {
       description: 'Toggle away mode: answer and prompt this session from Discord (agent-notify)',
       immediate: true,
     })
+    await $.command.register({
+      name: 'sound',
+      description: 'Mute or unmute peon-ping sounds',
+      immediate: true,
+    })
     const started = await next(e)
     // An earlier version opened a session picker pane; close one left behind.
     await $.ui.close({ id: 'session-picker' }).catch(() => undefined)
@@ -511,6 +516,12 @@ export const register: Register = on => {
 
   on('command.run', { command: 'away' }, async $ => {
     await toggleAway($)
+
+    return {}
+  })
+
+  on('command.run', { command: 'sound' }, async $ => {
+    await toggleSound($)
 
     return {}
   })
