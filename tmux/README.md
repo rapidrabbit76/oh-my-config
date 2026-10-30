@@ -73,6 +73,20 @@ If the installer finds an existing custom `~/.tmux.conf`, it migrates that file 
 
 > After install, press **Prefix + I** (Shift+i) to install plugins via TPM.
 
+### Session save & restore
+
+Sessions, tabs, pane layouts, working directories and pane contents are saved by tmux-resurrect and restored by tmux-continuum.
+
+| What | How |
+| --- | --- |
+| Save now | `Prefix + Ctrl-s` |
+| Auto save | every 15 minutes |
+| Restore | automatic when the tmux server starts (after a reboot, `tmux` is enough); `Prefix + Ctrl-r` to do it by hand |
+
+Programs running in a pane come back too: `claude`, `codex` and `opencode` are relaunched with their saved arguments and resume their last session (`claude -c`, `codex resume --last`, `opencode -c`), plus resurrect's default list (`vim`, `less`, `htop`, …). Override `@resurrect-processes` in `~/.tmux.conf.local` to change this.
+
+Save files live in `~/.local/share/tmux/resurrect/` (a few KB each; old ones are never deleted).
+
 ---
 
 ## Status Bar
