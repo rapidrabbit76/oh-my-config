@@ -94,6 +94,37 @@ cd oh-my-config/zsh
 
 ---
 
+## tmux session manager
+
+`tmux` with no arguments opens a small fzf TUI instead of blindly attaching to the last session:
+
+```
+╭─ 󰆍 tmux sessions ─────────────────────────────────────────────────╮
+│  Enter 접속 · ^T 새 세션 · ^R 이름 변경     │ ▶ 0  zsh   (zsh)   │
+│  ^X 삭제 · Esc 닫기 · 새 이름 입력 + Enter  │   1  nvim  (nvim)  │
+│  ▶ work          1 win                      │                    │
+│    oh-my-config  2 win  ● attached          │                    │
+╰───────────────────────────────────────────────────────────────────╯
+```
+
+| Sessions | What happens |
+| --- | --- |
+| 0 | Creates a new session |
+| 1 (and not inside tmux) | Attaches |
+| 2+ (or inside tmux) | The TUI above — the right pane previews the session's windows |
+
+| Key | Action |
+| --- | --- |
+| `Enter` | Attach / switch to the highlighted session. A name that matches nothing creates a session with that name |
+| `Ctrl-T` | New session named after the typed text (asks for a name when empty, default: current folder) |
+| `Ctrl-R` | Rename the highlighted session |
+| `Ctrl-X` | Kill the highlighted session (asks `y/N`) |
+| `Esc` | Close |
+
+`Ctrl-N` / `Ctrl-P` keep their fzf meaning (move down / up). Names are sanitised to `[A-Za-z0-9_-]`. Any arguments (`tmux ls`, `tmux new -s x`) pass straight through.
+
+---
+
 ## Oh My Zsh Plugins
 
 ### Built-in

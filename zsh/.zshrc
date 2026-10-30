@@ -31,6 +31,83 @@ plugins=(
 source "$ZSH/oh-my-zsh.sh"
 bindkey '^@' autosuggest-accept
 
+# ─── tmux: 인자 없이 `tmux` 치면 세션 관리 TUI ─────────
+# 세션 0개면 새로 만들고, 1개면 바로 붙고, 여러 개면 fzf 창 (fzf 없으면 attach).
+#   Enter: 접속 · Ctrl-T: 새 세션 · Ctrl-R: 이름 변경 · Ctrl-X: 삭제 · Esc: 닫기
+#   목록에 없는 이름을 치고 Enter 해도 그 이름으로 새 세션을 만듦.
+unalias tmux 2>/dev/null
+_omc_tmux_new() {
+    local name=${1//[^a-zA-Z0-9_-]/_}
+    [[ -n $name ]] || return 1
+    if [[ -n $TMUX ]]; then
+        command tmux new-session -d -s "$name" && command tmux switch-client -t "=$name"
+    else
+        command tmux new-session -s "$name"
+    fi
+}
+tmux() {
+    (( $# )) && { command tmux "$@"; return }
+    local go=attach-session
+    [[ -n $TMUX ]] && go=switch-client
+    local -a sessions lines padded
+    local out rc query key choice name line n w first=1
+    while true; do
+        sessions=("${(@f)$(command tmux list-sessions \
+            -F '#{session_name}	#{session_windows} win	#{?session_attached,● attached,}' 2>/dev/null)}")
+        sessions=("${(@)sessions:#}")
+        # 1열: 실제 세션 이름 (숨김, fzf {1}) · 2열부터 표시용 (이름 열 너비 맞춤)
+        w=8; padded=()
+        for line in "${sessions[@]}"; do n=${line%%	*}; (( ${#n} > w )) && w=${#n}; done
+        for line in "${sessions[@]}"; do n=${line%%	*}; padded+=("$n	${(r:$w:)n}	${line#*	}"); done
+        sessions=("${padded[@]}")
+        if (( ${#sessions} == 0 )); then
+            command tmux new-session; return
+        elif (( first && ${#sessions} == 1 )) && [[ -z $TMUX ]]; then
+            command tmux attach-session; return
+        elif ! command -v fzf &>/dev/null; then
+            [[ -n $TMUX ]] || command tmux attach-session; return
+        fi
+        first=0
+        out=$(printf '%s\n' "${sessions[@]}" | fzf \
+            --layout=reverse --height=~60% --min-height=14 --info=inline-right \
+            --border=rounded --border-label=' 󰆍 tmux sessions ' --border-label-pos=3 \
+            --padding=0,1 --tabstop=2 --delimiter='\t' --with-nth=2.. --prompt='   ' --pointer='▶' --marker=' ' --gutter=' ' --ghost='세션 검색 · 새 이름 입력' \
+            --header-first --header=$' Enter 접속 · ^T 새 세션 · ^R 이름 변경 · ^X 삭제\n Esc 닫기 · 새 이름 + Enter: 생성' \
+            --preview 'tmux list-windows -t "="{1} -F "#{?window_active,▶, } #{window_index}  #{window_name}  (#{pane_current_command})  #{b:pane_current_path}"' \
+            --preview-window='right,42%,border-left' --preview-label=' windows ' --preview-label-pos=3 \
+            --color='gutter:-1,border:#6c7086,label:#cba6f7,preview-border:#6c7086,header:#a6adc8,prompt:#89b4fa,pointer:#fab387,hl:#f9e2af,hl+:#f9e2af,fg+:#cdd6f4,bg+:#313244,info:#6c7086' \
+            --print-query --expect=ctrl-t,ctrl-r,ctrl-x)
+        rc=$?
+        (( rc > 1 )) && return 0
+        lines=("${(@f)out}")
+        query=$lines[1] key=$lines[2] choice=${lines[3]%%$'\t'*}
+        case $key in
+            ctrl-t)
+                name=${query:-${PWD:t}}
+                [[ -n $query ]] || vared -p '  새 세션 이름: ' name
+                _omc_tmux_new "$name"; return ;;
+            ctrl-r)
+                [[ -n $choice ]] || continue
+                name=$choice
+                vared -p "  '$choice' 새 이름: " name
+                name=${name//[^a-zA-Z0-9_-]/_}
+                [[ -n $name && $name != $choice ]] && command tmux rename-session -t "=$choice" "$name"
+                continue ;;
+            ctrl-x)
+                [[ -n $choice ]] || continue
+                if read -q "?  세션 '$choice' 를 삭제할까요? [y/N] "; then
+                    command tmux kill-session -t "=$choice"
+                fi
+                echo
+                continue ;;
+            *)
+                if [[ -n $choice ]]; then command tmux $go -t "=$choice"; return
+                elif [[ -n $query ]]; then _omc_tmux_new "$query"; return
+                else continue; fi ;;
+        esac
+    done
+}
+
 # ─── Completions (single init) ──────────────────────────
 autoload -Uz compinit bashcompinit
 compinit -C

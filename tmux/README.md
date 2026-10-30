@@ -140,6 +140,9 @@ These are shipped in the default `~/.tmux.conf.local` template so they survive r
 | `Prefix + L` | Last window |
 | `Prefix + Tab` | Yazi file explorer (50% split) |
 | `Prefix + f` | Search tabs in every session with fzf (falls back to `choose-tree`) |
+| `Prefix + N` | New session: the prompt is pre-filled with the current folder name, so Enter alone works (existing name → switch to it) |
+| `Prefix + s` | Session list (tmux default) |
+| `Prefix + M` | Move the current tab to another session (fzf pick; a new name creates the session) and follow it |
 | `Prefix + b` | Toggle side tab list |
 | `Prefix + C` | Toggle the Codex session sidebar (needs the [codex component](../codex/README.md)) |
 | `Prefix + r` | Reload config |
