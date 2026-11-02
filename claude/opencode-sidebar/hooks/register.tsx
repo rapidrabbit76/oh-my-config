@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { Call, ContextPart, Git, Info, Mcp, Pr, Todo, Turn } from '../types'
+import type { Cache, CacheRequest, Call, ContextDetail, ContextPart, Git, Info, Mcp, Pr, Todo, Turn } from '../types'
 
 const PANE = 'opencode-sidebar'
 const TITLE = 'Session'
@@ -12,8 +12,9 @@ const git = atom({ plugin: 'opencode-sidebar', key: 'git' } as const, null)
 const pr = atom({ plugin: 'opencode-sidebar', key: 'pr' } as const, null)
 const calls = atom({ plugin: 'opencode-sidebar', key: 'calls' } as const, [])
 const mcp = atom({ plugin: 'opencode-sidebar', key: 'mcp' } as const, [])
-const parts = atom({ plugin: 'opencode-sidebar', key: 'parts' } as const, [])
+const ctx = atom({ plugin: 'opencode-sidebar', key: 'ctx' } as const, null)
 const lastTurn = atom({ plugin: 'opencode-sidebar', key: 'lastTurn' } as const, null)
+const cache = atom({ plugin: 'opencode-sidebar', key: 'cache' } as const, null)
 const notify = atom({ plugin: 'opencode-sidebar', key: 'notify' } as const, false)
 const away = atom({ plugin: 'opencode-sidebar', key: 'away' } as const, false)
 const sound = atom({ plugin: 'opencode-sidebar', key: 'sound' } as const, null)
@@ -22,7 +23,7 @@ const TICK_MS = 15_000
 // The PR is fetched over the network, so on every fourth tick only.
 const PR_EVERY_TICKS = 4
 const RECENT_CALLS = 5
-const CONTEXT_PARTS = 5
+const CONTEXT_TOP = 3
 const CONTEXT_WARN = 80
 // How long a permission prompt or a question waits before it counts as
 // "waiting for you" and is sent.
@@ -37,6 +38,8 @@ const INBOX_MS = 3000
 const ASK_CHUNK_S = 540
 
 const kilo = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`)
+const mega = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M` : kilo(n))
+const pct = (x: number) => `${Math.round(x * 1000) / 10}%`
 
 const basename = (path: string) => path.split('/').filter(Boolean).pop() ?? path
 
@@ -47,6 +50,11 @@ const duration = (ms: number) => {
   if (h < 24) return `${h}h${m % 60 ? `${m % 60}m` : ''}`
   return `${Math.floor(h / 24)}d${h % 24 ? `${h % 24}h` : ''}`
 }
+
+const SPARK = '▁▂▃▄▅▆▇█'
+
+// Under a minute in seconds, else as `duration`.
+const span = (ms: number) => (ms < 60_000 ? `${Math.max(0, Math.round(ms / 1000))}s` : duration(ms))
 
 const LIMIT_LABEL: Record<string, string> = { five_hour: '5h', seven_day: '7d' }
 
@@ -109,13 +117,26 @@ async function refresh($: EngineInterface) {
 // What fills the window, as /context's rows estimate it locally (no request).
 async function refreshParts($: EngineInterface) {
   const usage = await $.session.usage({ breakdown: 'summary' })
-  const rows = usage.context.breakdown?.categories ?? []
-  const next: ContextPart[] = rows
-    .filter(r => r.kind === 'used' && r.tokens > 0)
-    .sort((a, b) => b.tokens - a.tokens)
-    .slice(0, CONTEXT_PARTS)
-    .map(r => ({ name: r.name, tokens: r.tokens, color: r.color }))
-  await update($, parts, () => next)
+  const b = usage.context.breakdown
+  if (!b) return
+  const parts: ContextPart[] = b.categories
+    .filter(r => r.tokens > 0)
+    .map(r => ({ name: r.name, tokens: r.tokens, color: r.color, kind: r.kind }))
+  const servers = new Map<string, number>()
+  for (const t of b.mcpTools) if (t.isLoaded) servers.set(t.serverName, (servers.get(t.serverName) ?? 0) + t.tokens)
+  const next: ContextDetail = {
+    parts,
+    memory: [...b.memoryFiles]
+      .sort((x, y) => y.tokens - x.tokens)
+      .slice(0, CONTEXT_TOP)
+      .map(f => ({ name: basename(f.path), tokens: f.tokens })),
+    mcp: [...servers]
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, CONTEXT_TOP)
+      .map(([name, tokens]) => ({ name, tokens })),
+    autoCompactAt: b.isAutoCompactEnabled ? b.autoCompactThreshold : undefined,
+  }
+  await update($, ctx, () => next)
 }
 
 // The /rename title, else the one the engine generated, from the transcript.
@@ -126,6 +147,81 @@ t=$(grep -o '"customTitle":"[^"]*"' "$f" | tail -1 | cut -d'"' -f4)
 [ -z "$t" ] && t=$(grep -o '"aiTitle":"[^"]*"' "$f" | tail -1 | cut -d'"' -f4)
 printf '%s' "$t"
 `
+
+// Each request's input tokens, from the transcript: one line per message id
+// (a streamed message is written several times), as
+// timestamp, uncached, cache read, cache write, of which 1h writes.
+const SESSION_CACHE = `
+f=$(/bin/ls "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/"$1".jsonl 2>/dev/null | head -1)
+[ -n "$f" ] || exit 0
+grep '"type":"assistant"' "$f" | grep '"usage":{' | awk '
+function num(s, k,   m) { if (match(s, "\\"" k "\\":[0-9]+")) { m = substr(s, RSTART, RLENGTH); sub(/.*:/, "", m); return m + 0 } return 0 }
+{
+  if (!match($0, /"id":"msg_[^"]*"/)) next
+  id = substr($0, RSTART + 6, RLENGTH - 7)
+  ts = ""; if (match($0, /"timestamp":"[^"]*"/)) ts = substr($0, RSTART + 13, RLENGTH - 14)
+  u = $0; sub(/^.*"usage":\\{/, "", u)
+  if (!(id in seen)) { seen[id] = 1; order[++n] = id }
+  row[id] = ts "\\t" num(u, "input_tokens") "\\t" num(u, "cache_read_input_tokens") "\\t" num(u, "cache_creation_input_tokens") "\\t" num(u, "ephemeral_1h_input_tokens")
+}
+END { for (i = 1; i <= n; i++) print row[order[i]] }'
+`
+
+// Enough cells for a wide sidebar; the bar shows as many as fit.
+const CACHE_RECENT = 120
+const CACHE_TTL_5M = 5 * 60_000
+const CACHE_TTL_1H = 60 * 60_000
+
+export function cacheOf(tsv: string): Cache | null {
+  const rows = tsv
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(line => {
+      const [ts = '', uncached = '0', read = '0', write = '0', write1h = '0'] = line.split('\t')
+      return { at: Date.parse(ts), uncached: +uncached, read: +read, write: +write, write1h: +write1h }
+    })
+    .filter(r => r.uncached + r.read + r.write > 0)
+  if (rows.length === 0) return null
+
+  let read = 0
+  let write = 0
+  let write1h = 0
+  let uncached = 0
+  let rebuilds = 0
+  const reqs: CacheRequest[] = rows.map((r, i) => {
+    read += r.read
+    write += r.write
+    write1h += r.write1h
+    uncached += r.uncached
+    const hit = r.read / (r.read + r.write + r.uncached)
+    if (i > 0 && hit < 0.5) rebuilds += 1
+    const prev = rows[i - 1]
+    const at = Number.isFinite(r.at) ? r.at : undefined
+    const gapMs = at !== undefined && prev && Number.isFinite(prev.at) ? at - prev.at : undefined
+    return { hit, read: r.read, write: r.write, uncached: r.uncached, at, gapMs }
+  })
+  const total = read + write + uncached
+  const lastWrite = [...rows].reverse().find(r => r.write > 0)
+  return {
+    requests: rows.length,
+    read,
+    write,
+    uncached,
+    reqs: reqs.slice(-CACHE_RECENT),
+    rebuilds,
+    billed: (read * 0.1 + (write - write1h) * 1.25 + write1h * 2 + uncached) / total,
+    lastAt: reqs[reqs.length - 1]?.at,
+    ttlMs: lastWrite && lastWrite.write1h > 0 ? CACHE_TTL_1H : CACHE_TTL_5M,
+  }
+}
+
+async function refreshCache($: EngineInterface) {
+  const id = await $.session.id()
+  const ran = await $.process.run(['/bin/sh', '-c', SESSION_CACHE, 'sh', id], { timeoutMs: 5000 })
+  if (ran.exitCode !== 0) return
+  const next = cacheOf(ran.stdout)
+  await update($, cache, () => next)
+}
 
 async function refreshTitle($: EngineInterface) {
   const id = await $.session.id()
@@ -442,6 +538,8 @@ async function refreshAll($: EngineInterface) {
     refreshMcp($).catch(() => undefined),
     // Also picks up a toggle made outside the sidebar (the peon CLI, say).
     refreshSound($).catch(() => undefined),
+    // Reads the transcript; a few ms even for a long session.
+    refreshCache($).catch(() => undefined),
   ])
 }
 
@@ -506,6 +604,7 @@ export const register: Register = on => {
       return {}
     }
     await refreshAll($)
+    await refreshParts($).catch(() => undefined)
     await $.ui.open({ id: PANE, title: TITLE })
 
     return {}
@@ -557,7 +656,7 @@ export const register: Register = on => {
       await refreshAll($)
       void refreshTitle($).catch(() => undefined)
       void refreshParts($).catch(() => undefined)
-      cancelWait()
+        cancelWait()
       if (!e.isAborted) void alertTurn($, e.reason, e.answer, e.durationMs).catch(() => undefined)
     }
 
@@ -728,7 +827,7 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const [now, name, todoList, repo, pull, callList, servers, partList, turn, clock, alerts, isAwayOn, isSoundOn] =
+    const [now, name, todoList, repo, pull, callList, servers, detail, turn, clock, alerts, isAwayOn, isSoundOn, hits] =
       await Promise.all([
         read($, info),
         read($, title),
@@ -737,14 +836,16 @@ export const register: Register = on => {
         read($, pr),
         read($, calls),
         read($, mcp),
-        read($, parts),
+        read($, ctx),
         read($, lastTurn),
         $.clock.now(),
         read($, notify),
         read($, away),
         read($, sound),
+        read($, cache),
       ])
-    const width = Math.max(10, Math.min(28, (e.viewport?.columns ?? 32) - 4))
+    // The pane body's own width: bars and cards span all of it.
+    const width = Math.max(10, e.props.bodyColumns)
 
     if (now === null) return <Text dimColor>Loading…</Text>
 
@@ -838,24 +939,235 @@ export const register: Register = on => {
           )}
         </Box>
 
-        <Box flexDirection="column">
-          <Text bold>Context</Text>
-          <Text>
-            <Text color={barColor}>{'█'.repeat(filled)}</Text>
-            <Text dimColor>{'░'.repeat(width - filled)}</Text>
-            <Text> {percent}%</Text>
-          </Text>
-          <Text dimColor>
-            {kilo(now.tokens ?? 0)} / {kilo(now.window)} tokens
-            {now.usd !== undefined && ` · $${now.usd.toFixed(2)}`}
-          </Text>
-          {partList.map(p => (
-            <Text wrap="truncate-end">
-              <Text color={p.color}>■</Text> {p.name} <Text dimColor>{kilo(p.tokens)}</Text>
-            </Text>
-          ))}
-          {percent >= CONTEXT_WARN && <Text color="warning">⚠ consider /compact</Text>}
-        </Box>
+        {(() => {
+          // A label line and a bar cut into one segment per row of /context
+          // (used rows in their colours, then free, the autocompact reserve
+          // last). Hovering the label opens the summary, a segment its row.
+          const rows = detail?.parts ?? []
+          const inWindow = rows.filter(p => p.kind !== 'deferred')
+          const used = rows.filter(p => p.kind === 'used').reduce((n, p) => n + p.tokens, 0)
+          const span = inWindow.reduce((n, p) => n + p.tokens, 0) || now.window
+          const ordered = [
+            ...inWindow.filter(p => p.kind === 'used'),
+            ...inWindow.filter(p => p.kind === 'free'),
+            ...inWindow.filter(p => p.kind === 'buffer'),
+          ]
+          let cum = 0
+          const segments = ordered.map((p, i) => {
+            const start = Math.round((cum / span) * width)
+            cum += p.tokens
+            const cells = Math.round((cum / span) * width) - start
+            return { p, i, cells }
+          })
+          const glyph = (p: ContextPart) => (p.kind === 'used' ? '█' : p.kind === 'buffer' ? '▒' : '░')
+          const card = (scope: string, body: RenderChildren) => (
+            <Box
+              key={scope}
+              display="none"
+              hover={{ scope, display: 'flex' }}
+              flexDirection="column"
+              borderStyle="round"
+              borderDimColor
+              paddingX={1}
+              width={width}
+            >
+              {body}
+            </Box>
+          )
+          const share = (n: number, of: number) => (of > 0 ? `${Math.round((n / of) * 100)}%` : '–')
+          return (
+            <Box flexDirection="column">
+              <Text bold hover={{ scope: 'ctx-sum', underline: true }} wrap="truncate-end">
+                Context <Text color={barColor}>{percent}%</Text>
+                <Text dimColor>
+                  {' '}
+                  {kilo(now.tokens ?? 0)}/{kilo(now.window)}
+                  {now.usd !== undefined && ` · $${now.usd.toFixed(2)}`}
+                </Text>
+              </Text>
+              {segments.length > 0 ? (
+                <Box flexDirection="row">
+                  {segments
+                    .filter(g => g.cells > 0)
+                    .map(g => (
+                      <Text
+                        color={g.p.kind === 'used' ? g.p.color : undefined}
+                        dimColor={g.p.kind !== 'used'}
+                        hover={{ scope: `ctx-part-${g.i}`, inverse: true }}
+                      >
+                        {glyph(g.p).repeat(g.cells)}
+                      </Text>
+                    ))}
+                </Box>
+              ) : (
+                <Text>
+                  <Text color={barColor}>{'█'.repeat(filled)}</Text>
+                  <Text dimColor>{'░'.repeat(width - filled)}</Text>
+                </Text>
+              )}
+              {percent >= CONTEXT_WARN && <Text color="warning">⚠ consider /compact</Text>}
+              {card(
+                'ctx-sum',
+                <>
+                  <Text wrap="truncate-end">
+                    {kilo(now.tokens ?? 0)} / {kilo(now.window)} · <Text color={barColor}>{percent}%</Text>
+                  </Text>
+                  {(now.usd !== undefined || detail?.autoCompactAt !== undefined) && (
+                    <Text dimColor wrap="truncate-end">
+                      {now.usd !== undefined && `$${now.usd.toFixed(2)}`}
+                      {now.usd !== undefined && detail?.autoCompactAt !== undefined && ' · '}
+                      {detail?.autoCompactAt !== undefined && `compacts at ${kilo(detail.autoCompactAt)}`}
+                    </Text>
+                  )}
+                  {rows.map(p => (
+                    <Text wrap="truncate-end" dimColor={p.kind !== 'used'}>
+                      <Text color={p.kind === 'used' ? p.color : undefined}>
+                        {p.kind === 'deferred' ? '·' : glyph(p)}
+                      </Text>{' '}
+                      {p.name} <Text dimColor>{kilo(p.tokens)}</Text>
+                    </Text>
+                  ))}
+                  {(detail?.memory.length ?? 0) > 0 && <Text bold>memory</Text>}
+                  {detail?.memory.map(m => (
+                    <Text dimColor wrap="truncate-end">
+                      {m.name} {kilo(m.tokens)}
+                    </Text>
+                  ))}
+                  {(detail?.mcp.length ?? 0) > 0 && <Text bold>mcp</Text>}
+                  {detail?.mcp.map(m => (
+                    <Text dimColor wrap="truncate-end">
+                      {m.name} {kilo(m.tokens)}
+                    </Text>
+                  ))}
+                </>,
+              )}
+              {segments.map(g =>
+                card(
+                  `ctx-part-${g.i}`,
+                  <>
+                    <Text bold wrap="truncate-end">
+                      <Text color={g.p.kind === 'used' ? g.p.color : undefined}>{glyph(g.p)}</Text> {g.p.name}
+                    </Text>
+                    <Text wrap="truncate-end">
+                      {kilo(g.p.tokens)} <Text dimColor>· {share(g.p.tokens, now.window)} of window</Text>
+                    </Text>
+                    {g.p.kind === 'used' && (
+                      <Text dimColor wrap="truncate-end">
+                        {share(g.p.tokens, used)} of what is used
+                      </Text>
+                    )}
+                    {g.p.kind === 'buffer' && (
+                      <Text dimColor wrap="truncate-end">
+                        kept free for autocompact
+                      </Text>
+                    )}
+                  </>,
+                ),
+              )}
+            </Box>
+          )
+        })()}
+
+        {hits !== null && (() => {
+          // A label line (hit rate, warm/cold dot) over a full-width row with a
+          // cell per recent request. Hovering the label opens the summary below,
+          // hovering a cell that request's.
+          const total = hits.read + hits.write + hits.uncached
+          const rate = total > 0 ? hits.read / total : 0
+          const reqs = Array.isArray(hits.reqs) ? hits.reqs : []
+          const last = reqs[reqs.length - 1]
+          const left = hits.lastAt !== undefined ? hits.lastAt + hits.ttlMs - clock : NaN
+          const isWarm = Number.isFinite(left) && left > 0
+          const hitColor = (x: number) => (x >= 0.9 ? 'success' : x >= 0.5 ? 'warning' : 'error')
+          const shown = reqs.slice(-width)
+          const first = hits.requests - shown.length + 1
+          const card = (scope: string, rows: RenderChildren) => (
+            <Box
+              key={scope}
+              display="none"
+              hover={{ scope, display: 'flex' }}
+              flexDirection="column"
+              borderStyle="round"
+              borderDimColor
+              paddingX={1}
+              width={width}
+            >
+              {rows}
+            </Box>
+          )
+          return (
+            <Box flexDirection="column">
+              <Text bold hover={{ scope: 'cache-sum', underline: true }} wrap="truncate-end">
+                Cache <Text color={hitColor(rate)}>{pct(rate)}</Text>{' '}
+                <Text color={isWarm ? 'success' : 'warning'}>{isWarm ? '●' : '○'}</Text>
+                <Text dimColor>
+                  {' '}
+                  {isWarm ? `${duration(left)} left` : 'cold'}
+                  {hits.rebuilds > 0 && ` · ↺${hits.rebuilds}`}
+                </Text>
+              </Text>
+              <Box flexDirection="row">
+                {shown.map((q, i) => (
+                  <Text color={hitColor(q.hit)} hover={{ scope: `cache-req-${i}`, inverse: true }}>
+                    {SPARK[Math.min(SPARK.length - 1, Math.floor(q.hit * SPARK.length))]}
+                  </Text>
+                ))}
+              </Box>
+              {card(
+                'cache-sum',
+                <>
+                  <Text wrap="truncate-end">
+                    hit <Text color={hitColor(rate)}>{pct(rate)}</Text>
+                    {last && <Text dimColor> · last {pct(last.hit)}</Text>}
+                  </Text>
+                  <Text dimColor wrap="truncate-end">
+                    {hits.requests} req
+                    {hits.rebuilds > 0 && <Text color="warning"> · ↺{hits.rebuilds} rebuilt</Text>}
+                  </Text>
+                  <Text dimColor wrap="truncate-end">
+                    read {mega(hits.read)} · write {mega(hits.write)}
+                  </Text>
+                  <Text dimColor wrap="truncate-end">
+                    new {mega(hits.uncached)} · billed {pct(hits.billed)}
+                  </Text>
+                  {Number.isFinite(left) && (
+                    <Text color={isWarm ? undefined : 'warning'} dimColor={isWarm} wrap="truncate-end">
+                      {isWarm
+                        ? `● warm · ${duration(left)} left (${hits.ttlMs > CACHE_TTL_5M ? '1h' : '5m'})`
+                        : '○ cold · next rebuilds'}
+                    </Text>
+                  )}
+                </>,
+              )}
+              {shown.map((q, i) =>
+                card(
+                  `cache-req-${i}`,
+                  <>
+                    <Text bold wrap="truncate-end">
+                      request {first + i}
+                      {q.at !== undefined && <Text dimColor> · {span(clock - q.at)} ago</Text>}
+                    </Text>
+                    <Text wrap="truncate-end">
+                      hit <Text color={hitColor(q.hit)}>{pct(q.hit)}</Text>
+                    </Text>
+                    <Text dimColor wrap="truncate-end">
+                      read {mega(q.read)} · write {mega(q.write)}
+                    </Text>
+                    <Text dimColor wrap="truncate-end">
+                      new {mega(q.uncached)}
+                      {q.gapMs !== undefined && ` · ${span(q.gapMs)} after prev`}
+                    </Text>
+                    {first + i > 1 && q.hit < 0.5 && (
+                      <Text color="warning" wrap="truncate-end">
+                        ↺ cache rebuilt
+                      </Text>
+                    )}
+                  </>,
+                ),
+              )}
+            </Box>
+          )
+        })()}
 
         {now.limits.length > 0 && (
           <Box flexDirection="column">

@@ -60,11 +60,18 @@ n: ○ alerts Discord / ntfy                    n, or /notify: alerts for this s
 a: ○ away answer in Discord                   a, or /away: answer and prompt from Discord
 s: ● sound peon-ping                          s, or /sound: mute / unmute peon-ping (when installed)
 
-Context
-████████░░░░░░  52%
-104k / 200k tokens · $1.23
-■ Messages 52k                                what fills the window (/context)
-■ System tools 31k
+Context 52% 104k/200k · $1.23                  hover: every /context row, cost,
+██████████████░░░░░░░░░▒▒▒▒▒                   autocompact point, top memory
+                                               files and MCP servers
+                                               bar: a segment per row (used in
+                                               its colour, ░ free, ▒ reserve);
+                                               hover one for its share
+
+Cache 99.3% ● 42m left · ↺3                    prompt cache hit · warm / cold
+▇█████████████▁███████████████                 a cell per recent request: hover
+                                               it for that request, the label
+                                               for read / write / new, billed
+                                               share and time left warm
 
 Limits
 5h   6% used  ↻ 3h12m                         used, and time until reset
