@@ -9,6 +9,11 @@
       "name": "opencode-sidebar",
       "source": "./claude/opencode-sidebar",
       "description": "opencode-style session sidebar and ctrl+x leader keys for Claude Code"
+    },
+    {
+      "name": "session-pane",
+      "source": "./claude/session-pane",
+      "description": "Status pane for the current session (goal, status/progress, steps, jump buttons, work folders, fix-later list); merges into the opencode-sidebar Session pane"
     }
   ]
 }
