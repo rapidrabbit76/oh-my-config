@@ -1,0 +1,33 @@
+{
+  "name": "session-pane",
+  "version": "0.2.0",
+  "description": "Status pane for the current session: goal, status/progress, steps, jump-to-message buttons, next-prompt copy, work folders and a fix-later list. No model calls; merges into the opencode-sidebar Session pane when present.",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "hostPane": {
+      "type": "string",
+      "title": "Host pane",
+      "description": "Pane id fragment of another plugin's pane to merge into (the opencode-sidebar Session pane by default). Leave empty to always open a separate pane.",
+      "default": "opencode-sidebar"
+    },
+    "hideHostSections": {
+      "type": "string",
+      "title": "Hide host sections",
+      "description": "Comma-separated section headings to drop from the host pane while merged, e.g. \"Recent,Cache\". Empty keeps the host pane as is.",
+      "default": ""
+    },
+    "watchRoots": {
+      "type": "string",
+      "title": "Watched folders (relative)",
+      "description": "Comma-separated folders under the session cwd whose new or edited files show as work products.",
+      "default": "docs"
+    },
+    "extraRoots": {
+      "type": "string",
+      "title": "Watched folders (absolute)",
+      "description": "Comma-separated absolute folders (a work folder outside the repo, for example C:/Work) whose files also show as work products.",
+      "default": ""
+    }
+  }
+}

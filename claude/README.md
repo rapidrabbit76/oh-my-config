@@ -97,16 +97,30 @@ Recent                                        last 5 tool calls
 
 It refreshes every 15 seconds and after each turn (the PR every minute, or right after `git push` / `gh pr`). It adds no tokens: everything is read from the engine or local commands, and the context breakdown is estimated locally.
 
+## Session status pane (optional)
+
+`session-pane` is a second, optional plugin that adds a status box for the *current* session to the Session pane: the goal in one line, status and progress (`구상 중 / 진행 중 / 끝 n/m`), steps as `●○`, buttons that scroll to your last prompt or the last answer and copy the next-session prompt, the folders where files were produced (click to open), and a fix-later list that asks once before `/clear` or `/exit`. It makes no model calls: the model is asked, in one system-prompt paragraph, to end answers with marker lines such as `[목적] …`, `[상태] 진행 중 2/5`, `[단계] a, b, c`, `[다음 프롬프트] …`, `[고칠 것] …`, and the pane reads those. Without opencode-sidebar it opens its own pane (`/session-pane`).
+
+```
+/plugin install session-pane --marketplace rapidrabbit76/oh-my-config
+```
+
+Options (`/config`): which pane to merge into, host sections to hide while merged (e.g. `Recent,Cache`), and the folders to watch for work products. Windows: opening files and folders goes through `helpers/open-path.ps1`, because processes started from Claude Code inherit a hidden-window flag. See [session-pane/README.md](session-pane/README.md).
+
 ## Structure
 
 ```
 claude/
 ├── install.sh
 ├── keybindings.json              ctrl+x bindings merged into ~/.claude/keybindings.json
-└── opencode-sidebar/             the plugin (listed in ../.claude-plugin/marketplace.json)
-    ├── .claude-plugin/plugin.json
-    ├── hooks/hooks.json
-    ├── hooks/register.tsx        sidebar pane, hint row, /sidebar, /notify
-    ├── tests/notify.test.tsx     claude plugin test claude/opencode-sidebar
+├── opencode-sidebar/             the plugin (listed in ../.claude-plugin/marketplace.json)
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/hooks.json
+│   ├── hooks/register.tsx        sidebar pane, hint row, /sidebar, /notify
+│   ├── tests/notify.test.tsx     claude plugin test claude/opencode-sidebar
+│   └── types/index.d.ts          its state contract
+└── session-pane/                 optional status pane for the current session (see above)
+    ├── hooks/*.ts(x)             session / files + open / todo / pane, with tests
+    ├── helpers/open-path.ps1     Windows: open a path, un-hide and raise its window
     └── types/index.d.ts          its state contract
 ```
