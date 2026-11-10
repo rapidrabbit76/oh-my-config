@@ -70,8 +70,28 @@ If the installer finds an existing custom `~/.tmux.conf`, it migrates that file 
 | [tmux-battery](https://github.com/tmux-plugins/tmux-battery) | Battery status |
 | [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) | Session save/restore |
 | [tmux-continuum](https://github.com/tmux-plugins/tmux-continuum) | Auto session save |
+| [agenmux](https://github.com/snirt/agenmux) | Local agent state detection for the tmux picker |
 
 > After install, press **Prefix + I** (Shift+i) to install plugins via TPM.
+
+### Agent-aware picker
+
+`Prefix + w` opens tmux's window picker with colored agent badges and state
+counts. Expand a window to see its individual panes. It displays `WORK`,
+`WAIT`, `DONE`, or `IDLE?`; the question mark means the agent is inferred to be
+idle, not that successful completion is guaranteed. During an open picker,
+state is scanned locally every three seconds; close the picker to stop scans.
+No prompts or model API calls are made, so monitoring consumes no AI tokens.
+Only pane IDs, agent names and states are stored in tmux options; conversation
+text and paths are not stored there. Agenmux detects state from process and
+screen content, so new UI layouts can be misclassified.
+
+Agenmux is installed by TPM, which downloads its native binary. If Python 3 or
+that binary is unavailable, `Prefix + w` uses the normal tmux picker. Reload
+Once the binary is available, the next `Prefix + w` uses the enhanced picker.
+Existing installations install the new TPM plugin during an update; if that
+fails, retry with `Prefix + I`. The shipped OpenCode detection rule is installed only if no user override exists in
+`${XDG_CONFIG_HOME:-~/.config}/agenmux/agents/opencode.conf`.
 
 ### Session save & restore
 
@@ -156,6 +176,7 @@ These are shipped in the default `~/.tmux.conf.local` template so they survive r
 | `Prefix + f` | Search tabs in every session with fzf (falls back to `choose-tree`) |
 | `Prefix + N` | New session: the prompt is pre-filled with the current folder name, so Enter alone works (existing name → switch to it) |
 | `Prefix + s` | Session list (tmux default) |
+| `Prefix + w` | Window picker with live agent status |
 | `Prefix + M` | Move the current tab to another session (fzf pick; a new name creates the session) and follow it |
 | `Prefix + b` | Toggle side tab list |
 | `Prefix + C` | Toggle the Codex session sidebar (needs the [codex component](../codex/README.md)) |
@@ -186,5 +207,6 @@ Work → Break transition is automatic (25min work → 5min break).
 
 - **tmux** >= 3.6 (older versions break decomposed Korean filenames, e.g. in yazi)
 - **git** (for TPM)
+- **Python 3** (for the optional agent-aware picker)
 - **Nerd Font** (for icons) — e.g., Hack Nerd Font, D2Coding Nerd Font
 - Terminal with true color support
