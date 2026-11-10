@@ -233,7 +233,7 @@ echo ""
 
 mkdir -p "$TMUX_SCRIPTS" "$MANAGED_DIR"
 
-ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh" "tab_sidebar.sh" "detect_host.sh" "move_window.sh")
+ITEMS=("managed .tmux.conf" "bootstrap .tmux.conf" ".tmux.conf.local" "net_speed.sh" "disk_usage.sh" "public_ip.sh" "pomodoro.sh" "tab_sidebar.sh" "detect_host.sh" "move_window.sh" "agent_tree.py")
 progress_start ${#ITEMS[@]}
 
 cp "$SCRIPT_DIR/.tmux.conf" "$MANAGED_CONF"
@@ -259,11 +259,16 @@ else
 fi
 
 # Keep in sync with sync_tmux in ../update.sh
-for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh detect_host.sh move_window.sh; do
+for script in net_speed.sh disk_usage.sh public_ip.sh pomodoro.sh tab_sidebar.sh detect_host.sh move_window.sh agent_tree.py; do
   cp "$SCRIPT_DIR/scripts/$script" "$TMUX_SCRIPTS/$script"
   chmod +x "$TMUX_SCRIPTS/$script"
   progress_tick "$script"
 done
+# Install the OpenCode detection override only when the user has none.
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/agenmux/agents"
+if [[ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/agenmux/agents/opencode.conf" ]]; then
+  cp "$SCRIPT_DIR/agents/opencode.conf" "${XDG_CONFIG_HOME:-$HOME/.config}/agenmux/agents/opencode.conf"
+fi
 # One-time host detection (e.g. hide the battery widget on servers)
 "$TMUX_SCRIPTS/detect_host.sh"
 

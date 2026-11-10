@@ -6,7 +6,7 @@
 #                                 a new version (checks run once a day in the background)
 #   update.sh --register <name>   Called by installers (tmux | yazi | nvim | claude | codex)
 #
-# Only config files are synced. Packages, ~/.zshrc and *.local files are never touched.
+# Config files and required tmux plugins are synced. Packages, ~/.zshrc and *.local files are never touched.
 # Local edits are kept; if upstream changed the same file, the local copy is saved as
 # <file>.bak.<timestamp> and replaced.
 # Disable the startup prompt with: export OMC_DISABLE_AUTO_UPDATE=1
@@ -47,10 +47,20 @@ sync_file() {
 sync_tmux() {
   local before=${#CHANGED[@]} f
   sync_file tmux/.tmux.conf "$HOME/.config/oh-my-config/tmux/.tmux.conf"
-  for f in "$OMC_HOME"/tmux/scripts/*.sh; do
+  for f in "$OMC_HOME"/tmux/scripts/*.sh "$OMC_HOME"/tmux/scripts/agent_tree.py; do
     sync_file "tmux/scripts/${f##*/}" "$HOME/.tmux/scripts/${f##*/}"
     chmod +x "$HOME/.tmux/scripts/${f##*/}"
   done
+  # Keep an existing user override; install the shipped OpenCode rule only if absent.
+  if [[ ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/agenmux/agents/opencode.conf" ]]; then
+    sync_file tmux/agents/opencode.conf "${XDG_CONFIG_HOME:-$HOME/.config}/agenmux/agents/opencode.conf"
+  fi
+  # Existing tmux installs need the new detector too. TPM skips installed plugins.
+  if [[ ! -d "$HOME/.tmux/plugins/agenmux" && -x "$HOME/.tmux/plugins/tpm/bin/install_plugins" ]]; then
+    if ! "$HOME/.tmux/plugins/tpm/bin/install_plugins" >/dev/null 2>&1; then
+      echo "oh-my-config: agenmux installation failed; use Prefix + I to retry" >&2
+    fi
+  fi
   # Installs from before detect_host.sh existed: detect once
   [[ -f "$HOME/.config/oh-my-config/tmux/host.conf" ]] || "$HOME/.tmux/scripts/detect_host.sh"
   if (( ${#CHANGED[@]} > before )) && tmux info &>/dev/null; then
